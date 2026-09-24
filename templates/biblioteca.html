@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div>{% if current_user.papel == 'terapeuta' %}<a class="voltar" href="{{ url_for('painel') }}">‹ Início</a>{% endif %}
+  <h1>Aprender</h1><div class="sub">Substâncias, recuperação e práticas para o dia a dia</div></div>
+  {% if current_user.papel == 'terapeuta' %}<a class="btn" href="{{ url_for('artigo_form') }}">+ Novo</a>{% endif %}</header>
+<main class="pagina">
+  <nav class="filtros" aria-label="Categorias">
+    <a class="{{ 'ativo' if not cat }}" href="{{ url_for('biblioteca') }}">Tudo</a>
+    {% for k, v in CATEGORIAS.items() %}<a class="{{ 'ativo' if cat == k }}" href="{{ url_for('biblioteca', c=k) }}">{{ v }}</a>{% endfor %}
+  </nav>
+  {% for a in artigos %}
+  <a class="cartao" href="{{ url_for('artigo', aid=a.id) }}">
+    <div class="etiquetas" style="margin:0 0 6px"><span class="tag">{{ CATEGORIAS[a.categoria] }}</span>{% if a.autor_id %}<span class="tag azul">Do seu terapeuta</span>{% endif %}{% if not a.publicado %}<span class="tag inativo">Rascunho</span>{% endif %}</div>
+    <h3>{{ a.titulo }}</h3>{% if a.resumo %}<p class="meta" style="margin:4px 0 0;color:var(--apagado)">{{ a.resumo }}</p>{% endif %}
+  </a>
+  {% else %}<div class="vazio">Nenhum conteúdo nesta categoria.</div>{% endfor %}
+</main>
+{% endblock %}

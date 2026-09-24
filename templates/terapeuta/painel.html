@@ -1,0 +1,60 @@
+{% extends "base.html" %}{% from "_itens.html" import consulta_item, registro_item  with context %}
+{% block conteudo %}
+<header class="topo"><div>
+  <div class="data">{{ hoje|dia_longo }}</div>
+  <h1>{{ saudacao }}, {{ current_user.nome.split()[0] }}</h1>
+</div></header>
+<main class="pagina">
+  <div class="numeros">
+    <div class="numero"><div class="ic" style="background:var(--primaria-clara)">🗓️</div><div><b>{{ consultas|length }}</b><span>Sessões hoje</span></div></div>
+    <a class="numero" href="{{ url_for('pacientes') }}" style="color:inherit"><div class="ic" style="background:var(--verde-claro)">🌿</div><div><b>{{ ativos }}</b><span>Pacientes ativos</span></div></a>
+    <a class="numero largo" href="{{ url_for('registros') }}" style="color:inherit"><div class="ic" style="background:var(--ambar-claro)">📋</div><div><b>{{ n_recentes }}</b><span>Registros nos últimos 7 dias</span></div></a>
+  </div>
+
+  {% set baixo = current_user.estoque_testes < current_user.estoque_minimo %}
+  <div id="estoque" class="cartao estoque {{ 'baixo' if baixo }}" style="margin-top:12px">
+    <div class="ic" style="font-size:1.5rem">🧪</div>
+    <div class="txt"><b>Testes toxicológicos</b>
+      {% if baixo %}<div class="aviso">Abaixo de {{ current_user.estoque_minimo }}. Hora de repor.</div>{% endif %}</div>
+    <form method="post" action="{{ url_for('estoque') }}" class="contador">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button name="acao" value="menos" aria-label="Diminuir">−</button>
+      <b aria-live="polite">{{ current_user.estoque_testes }}</b>
+      <button name="acao" value="mais" aria-label="Aumentar">+</button>
+    </form>
+  </div>
+  <details style="margin-top:6px">
+    <summary style="font-weight:500;color:var(--apagado);font-size:.92rem">Ajustar estoque e alerta</summary>
+    <form method="post" action="{{ url_for('estoque') }}" class="duas">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="definir">
+      <div class="campo" style="margin-top:4px"><label for="qtd">Em estoque</label><input id="qtd" name="qtd" type="number" min="0" inputmode="numeric" value="{{ current_user.estoque_testes }}"></div>
+      <div class="campo" style="margin-top:4px"><label for="minimo">Avisar abaixo de</label><input id="minimo" name="minimo" type="number" min="0" inputmode="numeric" value="{{ current_user.estoque_minimo }}"></div>
+      <button class="btn sec" style="grid-column:1/-1;margin-top:10px">Salvar estoque</button>
+    </form>
+  </details>
+
+  {% if atencao %}
+  <div class="secao"><h2>Pacientes em atenção</h2></div>
+  <div class="atencao"><ul>
+    {% for p, motivos in atencao %}<li><a href="{{ url_for('paciente_detalhe', pid=p.id) }}">{{ p.nome }}</a><small>{{ motivos|join('; ') }}</small></li>{% endfor %}
+  </ul></div>
+  {% endif %}
+
+  <div class="secao"><h2>Sessões de hoje</h2><a href="{{ url_for('agenda') }}">Ver agenda</a></div>
+  {% for c in consultas %}{{ consulta_item(c) }}{% else %}
+  <div class="vazio">Nenhuma sessão agendada para hoje.<br><a class="btn sec peq" href="{{ url_for('consulta_form') }}">Agendar sessão</a></div>
+  {% endfor %}
+
+  <div class="secao"><h2>Últimos registros</h2><a href="{{ url_for('registros') }}">Ver todos</a></div>
+  {% for r in recentes %}{{ registro_item(r) }}{% else %}
+  <div class="vazio">Os registros pós-sessão aparecem aqui.</div>
+  {% endfor %}
+
+  <div class="secao"><h2>Biblioteca</h2><a href="{{ url_for('biblioteca') }}">Abrir</a></div>
+  <a class="cartao" href="{{ url_for('biblioteca') }}">Conteúdos sobre substâncias, recuperação e práticas que seus pacientes também veem no app.</a>
+
+  <form method="post" action="{{ url_for('sair') }}" style="margin-top:32px;text-align:center">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sec peq">Sair da conta</button>
+  </form>
+</main>
+{% endblock %}

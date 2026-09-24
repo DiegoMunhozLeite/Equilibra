@@ -1,0 +1,47 @@
+{% macro registro_item(r, mostrar_nome=true) %}
+<a class="cartao linha-item" href="{{ url_for('registro_detalhe', rid=r.id) }}">
+  {% if mostrar_nome %}<div class="avatar">{{ r.paciente.inicial }}</div>{% endif %}
+  <div class="meio">
+    <div class="nome">{{ r.paciente.nome if mostrar_nome else r.data|dia_curto }}</div>
+    <div class="meta">{% if mostrar_nome %}{{ r.data|data_br }}{% endif %}{% if not r.realizada %} Não realizada{% endif %}{% if r.abordagens and not mostrar_nome %}{{ r.abordagens }}{% endif %}</div>
+    <div class="etiquetas">
+      <span class="tag {{ r.risco }}">Risco {{ RISCO[r.risco]|lower }}</span>
+      {% if r.humor %}<span class="tag">{{ HUMOR[r.humor][0] }} {{ HUMOR[r.humor][1] }}</span>{% endif %}
+      {% if r.uso_recente %}<span class="tag vermelho">Uso recente</span>{% endif %}
+      {% if r.teste_feito %}<span class="tag {{ r.teste_resultado }}">Teste {{ RESULTADO_TESTE.get(r.teste_resultado, 'feito')|lower }}</span>{% endif %}
+    </div>
+  </div>
+</a>
+{% endmacro %}
+
+{% macro consulta_item(c, voltar=None) %}
+<div class="cartao">
+  <div class="linha-item">
+    <div class="hora-bloco"><b>{{ c.inicio|hora }}</b><span>{{ c.duracao }} min</span></div>
+    <div class="meio">
+      <a class="nome" style="color:inherit;display:block" href="{{ url_for('paciente_detalhe', pid=c.paciente_id) }}">{{ c.paciente.nome }}</a>
+      <div class="meta">{{ TIPO_CONSULTA[c.tipo] }}</div>
+      <div class="etiquetas"><span class="tag {{ c.status }}">{{ STATUS_CONSULTA[c.status] }}</span>
+        {% if c.registro %}<span class="tag verde">Registro feito</span>{% endif %}</div>
+    </div>
+  </div>
+  {% if c.notas_pre %}<p class="meta" style="margin:10px 0 0;color:var(--apagado)">{{ c.notas_pre }}</p>{% endif %}
+  <div class="acoes" style="margin-top:12px">
+    <a class="btn sec peq" href="{{ url_for('consulta_form', cid=c.id) }}">Editar</a>
+    {% if c.status != 'cancelada' %}
+    <a class="btn peq" href="{{ url_for('registro_detalhe', rid=c.registro.id) if c.registro else url_for('registro_form', cid=c.id) }}">{{ 'Ver registro' if c.registro else 'Registrar sessão' }}</a>
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}
+
+{% macro grafico(linha, rotulo='Fissura', dias=30) %}
+<div class="grafico" role="img" aria-label="{{ rotulo }} nos últimos {{ dias }} dias">
+  <svg viewBox="0 0 300 80" preserveAspectRatio="none">
+    <line x1="0" y1="76" x2="300" y2="76" stroke="var(--linha)"/>
+    <line x1="0" y1="40" x2="300" y2="40" stroke="var(--linha)" stroke-dasharray="3 4"/>
+    {% if linha %}<polyline points="{{ linha }}" fill="none" stroke="var(--primaria)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>{% endif %}
+  </svg>
+  <div class="eixo"><span>{{ dias }} dias atrás</span><span>hoje</span></div>
+</div>
+{% endmacro %}

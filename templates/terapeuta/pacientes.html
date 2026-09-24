@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div><h1>Pacientes</h1><div class="sub">Quem você acompanha</div></div>
+  <a class="btn" href="{{ url_for('paciente_form') }}">+ Novo</a></header>
+<main class="pagina">
+  <form class="busca" method="get">
+    <input type="search" name="q" value="{{ q }}" placeholder="Buscar paciente" aria-label="Buscar paciente">
+    <input type="hidden" name="status" value="{{ st }}">
+  </form>
+  <nav class="filtros" aria-label="Filtrar por status">
+    {% for k, v in STATUS_PACIENTE.items() %}<a class="{{ 'ativo' if st == k }}" href="{{ url_for('pacientes', status=k, q=q) }}">{{ v }}</a>{% endfor %}
+    <a class="{{ 'ativo' if st not in STATUS_PACIENTE }}" href="{{ url_for('pacientes', status='todos', q=q) }}">Todos</a>
+  </nav>
+  {% for p in lista %}
+  <a class="cartao linha-item" href="{{ url_for('paciente_detalhe', pid=p.id) }}" style="align-items:flex-start">
+    <div class="avatar">{{ p.inicial }}</div>
+    <div class="meio">
+      <div style="display:flex;justify-content:space-between;gap:8px"><span class="nome">{{ p.nome }}</span><span class="tag {{ p.status }}">{{ STATUS_PACIENTE[p.status] }}</span></div>
+      {% if p.lista_substancias %}<div class="etiquetas">{% for s in p.lista_substancias %}<span class="tag">{{ s }}</span>{% endfor %}</div>{% endif %}
+      <div class="etiquetas">
+        {% if p.dias_limpo is not none %}<span class="tag verde">🌿 {{ p.dias_limpo|tempo }} sem uso</span>{% endif %}
+        {% if p.telefone %}<span class="meta">{{ p.telefone }}</span>{% endif %}
+      </div>
+    </div>
+  </a>
+  {% else %}
+  <div class="vazio">{% if q %}Nenhum paciente encontrado para “{{ q }}”.{% else %}Nenhum paciente neste status.{% endif %}
+    <br><a class="btn peq" href="{{ url_for('paciente_form') }}">Cadastrar paciente</a></div>
+  {% endfor %}
+</main>
+{% endblock %}

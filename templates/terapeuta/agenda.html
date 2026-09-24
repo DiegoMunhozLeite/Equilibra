@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% from "_itens.html" import consulta_item  with context %}
+{% block conteudo %}
+<header class="topo"><div><h1>Agenda</h1><div class="sub">Suas sessões</div></div>
+  <a class="btn" href="{{ url_for('consulta_form', dia=dia.isoformat()) }}">+ Sessão</a></header>
+<main class="pagina">
+  <div class="semana-nav">
+    <a href="{{ url_for('agenda', dia=anterior.isoformat()) }}" aria-label="Semana anterior">‹</a>
+    <b>{{ semana[0].strftime('%d/%m') }} a {{ semana[6].strftime('%d/%m/%Y') }}</b>
+    <a href="{{ url_for('agenda', dia=proxima.isoformat()) }}" aria-label="Próxima semana">›</a>
+  </div>
+  <nav class="semana" aria-label="Dias da semana">
+    {% for d in semana %}
+    <a href="{{ url_for('agenda', dia=d.isoformat()) }}" class="{{ 'sel' if d == dia }} {{ 'hoje' if d == hoje and d != dia }}" {{ 'aria-current=date' if d == dia }}>
+      <small>{{ (d|dia_curto).split(',')[0] }}</small><b>{{ d.day }}</b>{% if d in com_consulta %}<i></i>{% endif %}</a>
+    {% endfor %}
+  </nav>
+  {% if dia != hoje %}<p style="text-align:center;margin-top:10px"><a href="{{ url_for('agenda') }}">Ir para hoje</a></p>{% endif %}
+  <div class="secao"><h2>{{ (dia|dia_longo)[0]|upper }}{{ (dia|dia_longo)[1:] }}</h2></div>
+  {% for c in do_dia %}{{ consulta_item(c) }}{% else %}
+  <div class="vazio">Nenhuma sessão neste dia.<br><a class="btn sec peq" href="{{ url_for('consulta_form', dia=dia.isoformat()) }}">Agendar sessão</a></div>
+  {% endfor %}
+</main>
+{% endblock %}

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F6F4F1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1A1512" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Equilibra">
+<meta name="robots" content="noindex">
+<title>{% block titulo %}Equilibra{% endblock %}</title>
+<link rel="manifest" href="{{ url_for('manifest') }}">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+<link rel="icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=1">
+</head>
+{% import "_icones.html" as ic %}
+{% set sem_barra = self.body_class()|trim == 'sem-barra' %}
+<body class="{% block body_class %}{% endblock %}">
+{% with msgs = get_flashed_messages(with_categories=true) %}
+{% if msgs %}<div class="mensagens" role="status">{% for cat, m in msgs %}<div class="msg {{ cat }}">{{ m }}</div>{% endfor %}</div>{% endif %}
+{% endwith %}
+{% block conteudo %}{% endblock %}
+{% if current_user.is_authenticated and not sem_barra %}
+{% set ep = request.endpoint %}
+<div class="barra"><nav aria-label="Navegação principal">
+{% if current_user.papel == 'terapeuta' %}
+  <a href="{{ url_for('painel') }}" class="{{ 'ativo' if ep == 'painel' }}">{{ ic.inicio() }}Início</a>
+  <a href="{{ url_for('agenda') }}" class="{{ 'ativo' if ep in ['agenda','consulta_form'] }}">{{ ic.agenda() }}Agenda</a>
+  <a href="{{ url_for('fim_sessao') }}" class="{{ 'ativo' if ep in ['fim_sessao','gravacao_ver'] }}">{{ ic.microfone() }}Fim de sessão</a>
+  <a href="{{ url_for('pacientes') }}" class="{{ 'ativo' if ep in ['pacientes','paciente_detalhe','paciente_form'] }}">{{ ic.pessoas() }}Pacientes</a>
+  <a href="{{ url_for('registros') }}" class="{{ 'ativo' if ep in ['registros','registro_form','registro_detalhe','mood'] }}">{{ ic.prancheta() }}Registros</a>
+{% else %}
+  <a href="{{ url_for('casa') }}" class="{{ 'ativo' if ep == 'casa' }}">{{ ic.inicio() }}Início</a>
+  <a href="{{ url_for('checkin') }}" class="{{ 'ativo' if ep == 'checkin' }}">{{ ic.rosto() }}Check-in</a>
+  <a href="{{ url_for('diario') }}" class="{{ 'ativo' if ep == 'diario' }}">{{ ic.agenda() }}Diário</a>
+  <a href="{{ url_for('biblioteca') }}" class="{{ 'ativo' if ep in ['biblioteca','artigo'] }}">{{ ic.livro() }}Aprender</a>
+  <a href="{{ url_for('ajuda') }}" class="{{ 'ativo' if ep in ['ajuda','respirar'] }}">{{ ic.coracao() }}Ajuda</a>
+{% endif %}
+</nav></div>
+{% endif %}
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
+document.querySelectorAll('input[type=range]').forEach(function (r) {
+  var out = document.getElementById(r.id + '-v');
+  function upd() { r.style.setProperty('--p', (r.value - r.min) / (r.max - r.min) * 100 + '%'); if (out) out.textContent = r.value + '/10'; }
+  r.addEventListener('input', upd); upd();
+});
+document.querySelectorAll('[data-mostra]').forEach(function (t) {
+  var alvo = document.getElementById(t.dataset.mostra);
+  function upd() { alvo.hidden = !t.checked; }
+  t.addEventListener('change', upd); upd();
+});
+document.querySelectorAll('[data-confirma]').forEach(function (f) {
+  f.addEventListener('submit', function (e) { if (!confirm(f.dataset.confirma)) e.preventDefault(); });
+});
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

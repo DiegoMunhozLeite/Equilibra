@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div><a class="voltar" href="{{ url_for('agenda', dia=padrao.date().isoformat()) }}">‹ Agenda</a>
+  <h1>{{ 'Editar sessão' if c.id else 'Nova sessão' }}</h1></div></header>
+<main class="pagina">
+{% if not pacientes %}
+  <div class="vazio">Cadastre um paciente antes de agendar.<br><a class="btn peq" href="{{ url_for('paciente_form') }}">Cadastrar paciente</a></div>
+{% else %}
+<form method="post">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="campo"><label for="paciente">Paciente *</label>
+    <select id="paciente" name="paciente" required><option value="">Escolha</option>
+      {% for p in pacientes %}<option value="{{ p.id }}" {{ 'selected' if c.paciente_id == p.id }}>{{ p.nome }}</option>{% endfor %}</select></div>
+  <div class="duas">
+    <div class="campo"><label for="data">Data *</label><input id="data" name="data" type="date" required value="{{ padrao.date().isoformat() }}"></div>
+    <div class="campo"><label for="hora">Horário *</label><input id="hora" name="hora" type="time" required value="{{ padrao.strftime('%H:%M') }}"></div>
+  </div>
+  <div class="duas">
+    <div class="campo"><label for="duracao">Duração (min)</label><input id="duracao" name="duracao" type="number" min="10" max="240" step="5" inputmode="numeric" value="{{ c.duracao or 50 }}"></div>
+    <div class="campo"><label for="tipo">Tipo</label><select id="tipo" name="tipo">
+      {% for k, v in TIPO_CONSULTA.items() %}<option value="{{ k }}" {{ 'selected' if c.tipo == k }}>{{ v }}</option>{% endfor %}</select></div>
+  </div>
+  <div class="campo"><label for="status">Status</label><select id="status" name="status">
+    {% for k, v in STATUS_CONSULTA.items() %}<option value="{{ k }}" {{ 'selected' if c.status == k }}>{{ v }}</option>{% endfor %}</select></div>
+  <div class="campo"><label for="notas_pre">Notas pré-sessão</label>
+    <textarea id="notas_pre" name="notas_pre" placeholder="O que lembrar antes da sessão">{{ c.notas_pre or '' }}</textarea></div>
+  <div class="acoes">
+    <a class="btn sec" href="{{ url_for('agenda', dia=padrao.date().isoformat()) }}">Cancelar</a>
+    <button class="btn">Salvar sessão</button>
+  </div>
+</form>
+{% if c.id %}
+<form method="post" action="{{ url_for('excluir_consulta', cid=c.id) }}" data-confirma="Excluir esta sessão? O registro pós-sessão, se houver, continua no prontuário." style="margin-top:8px">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn perigo">Excluir sessão</button></form>
+{% endif %}
+{% endif %}
+</main>
+{% endblock %}

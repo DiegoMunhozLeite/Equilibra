@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div>
+  <a class="voltar" href="{{ url_for('registro_detalhe', rid=r.id) if r.id else url_for('paciente_detalhe', pid=p.id) }}">‹ Voltar</a>
+  <h1>{{ 'Editar registro' if r.id else 'Registro pós-sessão' }}</h1>
+  <div class="sub">{{ p.nome }}{% if cons %} · {{ cons.inicio|data_br }} às {{ cons.inicio|hora }}{% endif %}</div>
+</div></header>
+<main class="pagina">
+{% if t %}
+  {% set d = t.dados %}
+  <div class="cartao" style="border-color:var(--primaria);background:var(--primaria-clara)">
+    <b>Preenchido pela IA a partir da {{ 'gravação da sessão' if t.tipo == 'consulta' else 'sua gravação de fim de sessão' }}</b>
+    <p style="margin:6px 0 0">Confira cada campo antes de salvar. Nada vai para o prontuário sem sua confirmação.</p>
+    {% if d.sinais_alerta %}<div class="atencao" style="margin-top:12px"><h3>Sinais de alerta mencionados</h3><ul>{% for a in d.sinais_alerta %}<li>{{ a }}</li>{% endfor %}</ul></div>{% endif %}
+    <details style="margin-top:6px"><summary>Ver transcrição completa</summary><div class="texto-longo" style="font-size:.95rem">{{ t.texto }}</div></details>
+  </div>
+{% endif %}
+<form method="post">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  {% if t %}<input type="hidden" name="transcricao" value="{{ t.id }}">{% endif %}
+
+  <div class="alternar" style="margin-top:16px"><b>Sessão realizada?</b>
+    <div class="escolhas"><label><input type="radio" name="realizada" value="1" {{ 'checked' if r.realizada != false }}><span>Sim</span></label>
+      <label><input type="radio" name="realizada" value="0" {{ 'checked' if r.realizada == false }}><span>Não</span></label></div></div>
+  {% if not cons %}
+  <div class="campo"><label for="data">Data da sessão</label><input id="data" name="data" type="date" max="{{ hoje }}" value="{{ r.data or hoje }}"></div>
+  {% endif %}
+
+  <div class="campo"><span class="rot">Humor do paciente</span>
+    <div class="escolhas humor">
+      {% for n in [1,2,3,4,5] %}<label><input type="radio" name="humor" value="{{ n }}" {{ 'checked' if r.humor == n }}><span><em>{{ HUMOR[n][0] }}</em>{{ HUMOR[n][1] }}</span></label>{% endfor %}
+    </div></div>
+
+  {% for campo, rotulo in [('ansiedade','Ansiedade'),('motivacao','Motivação'),('fissura','Fissura')] %}
+  <div class="campo deslizador"><label for="{{ campo }}">{{ rotulo }}: <output id="{{ campo }}-v"></output></label>
+    <input id="{{ campo }}" name="{{ campo }}" type="range" min="0" max="10" value="{{ r[campo] if r[campo] is not none else 5 }}"></div>
+  {% endfor %}
+
+  <label class="alternar"><span>Houve uso recente de substâncias?</span><input type="checkbox" name="uso_recente" value="1" data-mostra="bloco-uso" {{ 'checked' if r.uso_recente }}></label>
+  <div id="bloco-uso" class="condicional"><div class="campo" style="margin-top:10px"><label for="data_uso">Quando foi o último uso?</label>
+    <input id="data_uso" name="data_uso" type="date" max="{{ hoje }}" value="{{ r.data_uso or '' }}">
+    <div class="ajuda">Atualiza o tempo sem uso do paciente.</div></div></div>
+
+  <label class="alternar"><span>Fez teste toxicológico?</span><input type="checkbox" name="teste_feito" value="1" data-mostra="bloco-teste" {{ 'checked' if r.teste_feito }}></label>
+  <div id="bloco-teste" class="condicional"><div class="campo" style="margin-top:10px"><span class="rot">Resultado</span>
+    <div class="escolhas">{% for k, v in RESULTADO_TESTE.items() %}<label><input type="radio" name="teste_resultado" value="{{ k }}" {{ 'checked' if r.teste_resultado == k }}><span>{{ v }}</span></label>{% endfor %}</div>
+    <div class="ajuda">Desconta 1 do estoque ({{ current_user.estoque_testes }} agora).</div></div></div>
+
+  <div class="campo"><span class="rot">Nível de risco</span>
+    <div class="escolhas risco">{% for k, v in RISCO.items() %}<label><input type="radio" name="risco" value="{{ k }}" {{ 'checked' if r.risco == k }}><span>{{ v }}</span></label>{% endfor %}</div></div>
+
+  <div class="campo"><label for="abordagens">Abordagens usadas</label>
+    <input id="abordagens" name="abordagens" type="text" list="lista-abordagens" placeholder="Ex.: respiração, reiki, escuta" value="{{ r.abordagens or '' }}">
+    <datalist id="lista-abordagens">{% for a in ['Escuta terapêutica','Respiração consciente','Meditação','Reiki','Florais','Aromaterapia','Constelação','Prevenção de recaída','Entrevista motivacional'] %}<option value="{{ a }}">{% endfor %}</datalist></div>
+
+  <div class="campo"><label for="comentarios">Comentários e evolução</label>
+    <textarea id="comentarios" name="comentarios" rows="8" placeholder="Como foi a sessão? Estado do paciente, temas abordados, observações">{{ r.comentarios or '' }}</textarea>
+    {% if not t and transcricao_ativa %}<div class="ajuda">Prefere falar? <a href="{{ url_for('fim_sessao', consulta=r.consulta_id) if r.consulta_id else url_for('fim_sessao', paciente=p.id) }}">Grave o fim de sessão</a> e a IA preenche para você.</div>{% endif %}</div>
+
+  <div class="campo"><label for="tarefa_paciente">Tarefa para o paciente</label>
+    <input id="tarefa_paciente" name="tarefa_paciente" type="text" placeholder="Aparece no app do paciente" value="{{ r.tarefa_paciente or '' }}"></div>
+
+  <div class="acoes">
+    <a class="btn sec" href="{{ url_for('registro_detalhe', rid=r.id) if r.id else url_for('paciente_detalhe', pid=p.id) }}">Cancelar</a>
+    <button class="btn">Salvar registro</button>
+  </div>
+</form>
+</main>
+{% endblock %}

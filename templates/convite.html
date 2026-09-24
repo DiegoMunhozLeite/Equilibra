@@ -1,0 +1,22 @@
+{% extends "base.html" %}{% block body_class %}sem-barra{% endblock %}
+{% block titulo %}Seu acesso · Equilibra{% endblock %}
+{% block conteudo %}
+<main class="auth">
+  {% include "_marca.html" %}
+  <h1>Olá, {{ p.nome.split()[0] }}</h1>
+  <p style="color:var(--apagado);margin-top:8px">{{ p.terapeuta.nome }} convidou você para acompanhar seu cuidado por aqui: check-in diário, próximas sessões e práticas para momentos difíceis.</p>
+  <form method="post">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="campo"><label for="email">Seu e-mail</label>
+      <input id="email" name="email" type="email" autocomplete="username" autocapitalize="off" required value="{{ request.form.email or p.email or '' }}"></div>
+    <div class="campo"><label for="senha">Crie uma senha</label>
+      <input id="senha" name="senha" type="password" autocomplete="new-password" minlength="8" required>
+      <div class="ajuda">Pelo menos 8 caracteres.</div></div>
+    <div class="campo"><label for="confirma">Confirme a senha</label>
+      <input id="confirma" name="confirma" type="password" autocomplete="new-password" minlength="8" required></div>
+    <label class="alternar" style="margin-top:20px"><span>Concordo que meus check-ins fiquem visíveis para meu terapeuta e sejam usados só no meu acompanhamento.</span>
+      <input type="checkbox" name="aceite" value="1" required></label>
+    <button class="btn bloco" style="margin-top:24px">Criar meu acesso</button>
+  </form>
+</main>
+{% endblock %}

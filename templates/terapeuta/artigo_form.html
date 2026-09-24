@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div><a class="voltar" href="{{ url_for('artigo', aid=a.id) if a.id else url_for('biblioteca') }}">‹ Voltar</a>
+  <h1>{{ 'Editar conteúdo' if a.id else 'Novo conteúdo' }}</h1></div></header>
+<main class="pagina">
+<form method="post">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="campo"><label for="titulo">Título *</label><input id="titulo" name="titulo" type="text" required value="{{ a.titulo or '' }}"></div>
+  <div class="campo"><label for="categoria">Categoria</label><select id="categoria" name="categoria">
+    {% for k, v in CATEGORIAS.items() %}<option value="{{ k }}" {{ 'selected' if a.categoria == k }}>{{ v }}</option>{% endfor %}</select></div>
+  <div class="campo"><label for="resumo">Resumo</label><input id="resumo" name="resumo" type="text" value="{{ a.resumo or '' }}"></div>
+  <div class="campo"><label for="corpo">Texto *</label><textarea id="corpo" name="corpo" rows="14" required>{{ a.corpo or '' }}</textarea>
+    <div class="ajuda">Comece uma linha com “## ” para subtítulo e com “- ” para item de lista.</div></div>
+  <label class="alternar"><span>Visível para meus pacientes</span><input type="checkbox" name="publicado" value="1" {{ 'checked' if a.publicado }}></label>
+  <div class="acoes"><a class="btn sec" href="{{ url_for('biblioteca') }}">Cancelar</a><button class="btn">Salvar conteúdo</button></div>
+</form>
+</main>
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% from "_itens.html" import registro_item  with context %}
+{% block conteudo %}
+<header class="topo"><div><h1>Registros</h1><div class="sub">Sessões e evolução dos pacientes</div></div></header>
+<main class="pagina">
+  <nav class="filtros" aria-label="Seções"><a class="ativo" href="{{ url_for('registros') }}">Registros</a><a href="{{ url_for('mood') }}">Mood</a></nav>
+  <form class="busca" method="get">
+    <input type="search" name="q" value="{{ q }}" placeholder="Buscar paciente" aria-label="Buscar paciente">
+    <select name="risco" aria-label="Filtrar por risco" onchange="this.form.submit()">
+      <option value="">Todos</option>{% for k, v in RISCO.items() %}<option value="{{ k }}" {{ 'selected' if risco == k }}>Risco {{ v|lower }}</option>{% endfor %}
+    </select>
+  </form>
+  {% if atencao and not q and not risco %}
+  <div class="atencao" style="margin-bottom:16px"><h3>Pacientes em atenção</h3><ul>
+    {% for p, motivos in atencao %}<li><a href="{{ url_for('paciente_detalhe', pid=p.id) }}">{{ p.nome }}</a><small>{{ motivos|join('; ') }}</small></li>{% endfor %}
+  </ul></div>
+  {% endif %}
+  {% for r in lista %}{{ registro_item(r) }}{% else %}
+  <div class="vazio">{% if q or risco %}Nenhum registro com esses filtros.{% else %}Os registros aparecem aqui depois de cada sessão.<br><a class="btn peq" href="{{ url_for('fim_sessao') }}">Registrar fim de sessão</a>{% endif %}</div>
+  {% endfor %}
+</main>
+{% endblock %}

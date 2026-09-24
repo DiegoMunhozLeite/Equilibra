@@ -1,0 +1,1322 @@
+"""
+Equilibra — acompanhamento holístico em dependência química.
+Flask + PWA (no iPhone: Safari > Compartilhar > Adicionar à Tela de Início).
+
+Configuração por variáveis de ambiente (nunca coloque chaves no código):
+  SECRET_KEY          obrigatória em produção
+  DATABASE_URL        opcional (padrão: SQLite local)
+  CODIGO_CADASTRO     opcional; se definido, é exigido para cadastrar terapeutas
+  ANTHROPIC_API_KEY   opcional; ativa resumos e feedback clínico com IA
+  ANTHROPIC_MODEL     opcional; modelo usado pela IA
+  OPENAI_API_KEY      opcional; ativa a transcrição de áudio (ver voz.py)
+"""
+import json
+import os
+import secrets
+from datetime import date, datetime, timedelta
+from functools import wraps
+from zoneinfo import ZoneInfo
+
+from flask import (Flask, Response, abort, flash, jsonify, redirect, render_template, request,
+                   send_from_directory, session, url_for)
+from flask_login import (LoginManager, UserMixin, current_user, login_required,
+                         login_user, logout_user)
+from flask_sqlalchemy import SQLAlchemy
+from markupsafe import Markup, escape
+from sqlalchemy import func
+from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.security import check_password_hash, generate_password_hash
+
+import voz
+
+TZ = ZoneInfo("America/Sao_Paulo")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DEV = os.environ.get("FLASK_ENV") == "development"
+
+app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+
+db_url = os.environ.get("DATABASE_URL", "sqlite:///" + os.path.join(BASE_DIR, "equilibra.db"))
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+app.config.update(
+    SECRET_KEY=os.environ.get("SECRET_KEY") or secrets.token_hex(32),
+    SQLALCHEMY_DATABASE_URI=db_url,
+    SQLALCHEMY_ENGINE_OPTIONS={"pool_pre_ping": True},
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=not DEV,
+    REMEMBER_COOKIE_DURATION=timedelta(days=30),
+    REMEMBER_COOKIE_SECURE=not DEV,
+    MAX_CONTENT_LENGTH=26 * 1024 * 1024,
+)
+
+db = SQLAlchemy(app)
+login_manager = LoginManager(app)
+login_manager.login_view = "entrar"
+login_manager.login_message = "Entre para continuar."
+
+
+def agora():
+    return datetime.now(TZ).replace(tzinfo=None)
+
+
+def hoje():
+    return agora().date()
+
+
+def para_data(txt):
+    try:
+        return date.fromisoformat(txt) if txt else None
+    except ValueError:
+        return None
+
+
+def para_int(txt, padrao=None, minimo=None, maximo=None):
+    try:
+        v = int(txt)
+    except (TypeError, ValueError):
+        return padrao
+    if minimo is not None:
+        v = max(minimo, v)
+    if maximo is not None:
+        v = min(maximo, v)
+    return v
+
+
+def para_float(txt, padrao=None):
+    try:
+        return float(str(txt).replace(",", "."))
+    except (TypeError, ValueError):
+        return padrao
+
+
+# ============================================================ constantes
+HUMOR = {1: ("😞", "Muito mal"), 2: ("😔", "Mal"), 3: ("😐", "Regular"), 4: ("🙂", "Bem"), 5: ("😊", "Muito bem")}
+RISCO = {"baixo": "Baixo", "moderado": "Moderado", "alto": "Alto", "critico": "Crítico"}
+STATUS_PACIENTE = {"ativo": "Ativo", "pausado": "Pausado", "alta": "Alta", "inativo": "Inativo"}
+STATUS_CONSULTA = {"agendada": "Agendada", "realizada": "Realizada", "faltou": "Faltou", "cancelada": "Cancelada"}
+TIPO_CONSULTA = {"individual": "Individual", "familiar": "Familiar", "grupo": "Grupo", "online": "Online"}
+RESULTADO_TESTE = {"negativo": "Negativo", "positivo": "Positivo", "inconclusivo": "Inconclusivo"}
+SUBSTANCIAS = ["Álcool", "Tabaco/nicotina", "Maconha", "Cocaína", "Crack", "Benzodiazepínicos",
+               "Opioides", "Anfetaminas", "Ecstasy/MDMA", "Inalantes", "Jogo", "Outra"]
+GATILHOS = ["Estresse", "Solidão", "Tédio", "Raiva", "Tristeza", "Cansaço", "Festa ou evento",
+            "Pessoas específicas", "Dinheiro na mão", "Conflito familiar", "Dor física"]
+CATEGORIAS = {"substancia": "Substâncias", "recuperacao": "Recuperação", "pratica": "Práticas"}
+MARCOS = [(1, "24 horas"), (30, "1 mês"), (60, "2 meses"), (90, "3 meses"), (120, "4 meses"),
+          (180, "6 meses"), (270, "9 meses"), (365, "1 ano"), (548, "18 meses"), (730, "2 anos"),
+          (1095, "3 anos"), (1825, "5 anos"), (3650, "10 anos")]
+DIAS = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
+DIAS_LONGOS = ["segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo"]
+MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho",
+         "agosto", "setembro", "outubro", "novembro", "dezembro"]
+
+
+# ============================================================ modelos
+class Terapeuta(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(80), nullable=False)
+    email = db.Column(db.String(160), unique=True, nullable=False)
+    senha_hash = db.Column(db.String(256), nullable=False)
+    estoque_testes = db.Column(db.Integer, default=0)
+    estoque_minimo = db.Column(db.Integer, default=10)
+    criado_em = db.Column(db.DateTime, default=agora)
+    papel = "terapeuta"
+
+    def get_id(self):
+        return f"t-{self.id}"
+
+
+class Paciente(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    terapeuta_id = db.Column(db.Integer, db.ForeignKey("terapeuta.id"), nullable=False, index=True)
+    nome = db.Column(db.String(100), nullable=False)
+    nascimento = db.Column(db.Date)
+    telefone = db.Column(db.String(30))
+    email = db.Column(db.String(160), unique=True)
+    substancias = db.Column(db.String(300))
+    tempo_uso = db.Column(db.String(60))
+    status = db.Column(db.String(12), default="ativo")
+    inicio_tratamento = db.Column(db.Date)
+    ultimo_uso = db.Column(db.Date)
+    sessoes_semana = db.Column(db.Integer, default=1)
+    valor_sessao = db.Column(db.Float)
+    horario_pref = db.Column(db.String(80))
+    emergencia_nome = db.Column(db.String(80))
+    emergencia_tel = db.Column(db.String(30))
+    anamnese = db.Column(db.Text)
+    senha_hash = db.Column(db.String(256))
+    codigo_convite = db.Column(db.String(40), unique=True)
+    criado_em = db.Column(db.DateTime, default=agora)
+    terapeuta = db.relationship("Terapeuta", backref="pacientes")
+    papel = "paciente"
+
+    def get_id(self):
+        return f"p-{self.id}"
+
+    @property
+    def lista_substancias(self):
+        return [s for s in (self.substancias or "").split("|") if s]
+
+    @property
+    def inicial(self):
+        return (self.nome or "?")[0].upper()
+
+    @property
+    def tem_acesso(self):
+        return bool(self.senha_hash)
+
+    def registrar_uso(self, dia):
+        if dia and (not self.ultimo_uso or dia > self.ultimo_uso):
+            self.ultimo_uso = dia
+
+    @property
+    def dias_limpo(self):
+        return (hoje() - self.ultimo_uso).days if self.ultimo_uso else None
+
+    def conquistas(self):
+        d = self.dias_limpo
+        if d is None:
+            return [], None
+        feitas = [rot for n, rot in MARCOS if d >= n]
+        prox = next(((n - d, rot) for n, rot in MARCOS if d < n), None)
+        return feitas, prox
+
+    def saldo_sessoes(self):
+        compradas = db.session.query(func.coalesce(func.sum(Pagamento.sessoes), 0)).filter_by(paciente_id=self.id).scalar()
+        realizadas = Consulta.query.filter_by(paciente_id=self.id, status="realizada").count()
+        return int(compradas) - realizadas
+
+
+def definir_senha(u, senha):
+    u.senha_hash = generate_password_hash(senha)
+
+
+def conferir_senha(u, senha):
+    return bool(u and u.senha_hash) and check_password_hash(u.senha_hash, senha)
+
+
+class Consulta(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    terapeuta_id = db.Column(db.Integer, db.ForeignKey("terapeuta.id"), nullable=False, index=True)
+    paciente_id = db.Column(db.Integer, db.ForeignKey("paciente.id"), nullable=False, index=True)
+    inicio = db.Column(db.DateTime, nullable=False)
+    duracao = db.Column(db.Integer, default=50)
+    tipo = db.Column(db.String(20), default="individual")
+    status = db.Column(db.String(20), default="agendada")
+    notas_pre = db.Column(db.Text)
+    paciente = db.relationship("Paciente")
+    registro = db.relationship("Registro", uselist=False, back_populates="consulta")
+
+
+class Registro(db.Model):
+    """Registro pós-sessão (prontuário). Só o terapeuta vê, exceto 'tarefa_paciente'."""
+    id = db.Column(db.Integer, primary_key=True)
+    terapeuta_id = db.Column(db.Integer, db.ForeignKey("terapeuta.id"), nullable=False, index=True)
+    paciente_id = db.Column(db.Integer, db.ForeignKey("paciente.id"), nullable=False, index=True)
+    consulta_id = db.Column(db.Integer, db.ForeignKey("consulta.id"))
+    data = db.Column(db.Date, default=hoje, nullable=False)
+    realizada = db.Column(db.Boolean, default=True)
+    humor = db.Column(db.Integer)          # 1–5
+    ansiedade = db.Column(db.Integer)      # 0–10
+    motivacao = db.Column(db.Integer)      # 0–10
+    fissura = db.Column(db.Integer)        # 0–10
+    uso_recente = db.Column(db.Boolean, default=False)
+    data_uso = db.Column(db.Date)
+    teste_feito = db.Column(db.Boolean, default=False)
+    teste_resultado = db.Column(db.String(15))
+    risco = db.Column(db.String(10), default="baixo")
+    abordagens = db.Column(db.String(200))
+    comentarios = db.Column(db.Text)
+    tarefa_paciente = db.Column(db.String(300))
+    feedback_ia = db.Column(db.Text)
+    criado_em = db.Column(db.DateTime, default=agora)
+    paciente = db.relationship("Paciente")
+    consulta = db.relationship("Consulta", back_populates="registro")
+
+
+class CheckIn(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    paciente_id = db.Column(db.Integer, db.ForeignKey("paciente.id"), nullable=False, index=True)
+    data = db.Column(db.Date, nullable=False, default=hoje)
+    humor = db.Column(db.Integer, nullable=False)
+    fissura = db.Column(db.Integer, nullable=False)
+    sono = db.Column(db.Integer)
+    usou = db.Column(db.Boolean, default=False)
+    gatilhos = db.Column(db.String(300))
+    nota = db.Column(db.Text)
+    paciente = db.relationship("Paciente")
+    __table_args__ = (db.UniqueConstraint("paciente_id", "data"),)
+
+
+class Pagamento(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    paciente_id = db.Column(db.Integer, db.ForeignKey("paciente.id"), nullable=False, index=True)
+    data = db.Column(db.Date, default=hoje)
+    valor = db.Column(db.Float, nullable=False)
+    sessoes = db.Column(db.Integer, default=1)
+    nota = db.Column(db.String(200))
+
+
+class Consentimento(db.Model):
+    """Termo de consentimento para gravação de sessões."""
+    id = db.Column(db.Integer, primary_key=True)
+    paciente_id = db.Column(db.Integer, db.ForeignKey("paciente.id"), nullable=False, index=True)
+    terapeuta_id = db.Column(db.Integer, db.ForeignKey("terapeuta.id"), nullable=False)
+    assinado_em = db.Column(db.Date, nullable=False)
+    versao = db.Column(db.String(40))
+    arquivo = db.Column(db.LargeBinary)
+    arquivo_tipo = db.Column(db.String(80))
+    arquivo_nome = db.Column(db.String(120))
+    revogado_em = db.Column(db.Date)
+    criado_em = db.Column(db.DateTime, default=agora)
+
+
+class Transcricao(db.Model):
+    """Texto transcrito de uma gravação. O áudio em si nunca é guardado."""
+    id = db.Column(db.Integer, primary_key=True)
+    terapeuta_id = db.Column(db.Integer, db.ForeignKey("terapeuta.id"), nullable=False, index=True)
+    paciente_id = db.Column(db.Integer, db.ForeignKey("paciente.id"), nullable=False, index=True)
+    consulta_id = db.Column(db.Integer, db.ForeignKey("consulta.id"))
+    registro_id = db.Column(db.Integer, db.ForeignKey("registro.id"))
+    tipo = db.Column(db.String(10), nullable=False)  # resumo | consulta
+    status = db.Column(db.String(12), default="gravando")  # gravando | pronta | revisada | erro
+    texto = db.Column(db.Text, default="")
+    partes = db.Column(db.Integer, default=0)
+    falhas = db.Column(db.Integer, default=0)
+    segundos = db.Column(db.Integer, default=0)
+    sugestao = db.Column(db.Text)  # JSON gerado pela IA
+    erro = db.Column(db.String(300))
+    criado_em = db.Column(db.DateTime, default=agora)
+    paciente = db.relationship("Paciente")
+    consulta = db.relationship("Consulta")
+
+    @property
+    def dados(self):
+        try:
+            return json.loads(self.sugestao) if self.sugestao else {}
+        except ValueError:
+            return {}
+
+
+def consentimento_ativo(p):
+    return (Consentimento.query.filter_by(paciente_id=p.id, revogado_em=None)
+            .order_by(Consentimento.assinado_em.desc()).first())
+
+
+class Artigo(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    autor_id = db.Column(db.Integer, db.ForeignKey("terapeuta.id"))  # None = conteúdo base
+    categoria = db.Column(db.String(30), nullable=False)
+    titulo = db.Column(db.String(140), nullable=False)
+    resumo = db.Column(db.String(300))
+    corpo = db.Column(db.Text, nullable=False)
+    publicado = db.Column(db.Boolean, default=True)
+
+
+@login_manager.user_loader
+def carregar_usuario(uid):
+    try:
+        tipo, num = uid.split("-", 1)
+        num = int(num)
+    except ValueError:
+        return None
+    if tipo == "t":
+        return db.session.get(Terapeuta, num)
+    p = db.session.get(Paciente, num)
+    return p if p and p.tem_acesso and p.status != "inativo" else None
+
+
+# ============================================================ segurança
+def csrf_token():
+    if "_csrf" not in session:
+        session["_csrf"] = secrets.token_urlsafe(32)
+    return session["_csrf"]
+
+
+@app.before_request
+def verificar_csrf():
+    if request.method == "POST":
+        enviado = request.form.get("_csrf", "")
+        if not enviado or not secrets.compare_digest(enviado, session.get("_csrf", "")):
+            abort(400)
+
+
+@app.after_request
+def cabecalhos(resp):
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["X-Frame-Options"] = "DENY"
+    resp.headers["Referrer-Policy"] = "same-origin"
+    if resp.mimetype == "text/html":
+        resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+def exige(papel):
+    def deco(f):
+        @wraps(f)
+        @login_required
+        def inner(*a, **kw):
+            if current_user.papel != papel:
+                abort(403)
+            return f(*a, **kw)
+        return inner
+    return deco
+
+
+def meu_paciente(pid):
+    p = db.session.get(Paciente, pid)
+    if not p or p.terapeuta_id != current_user.id:
+        abort(404)
+    return p
+
+
+def minha_consulta(cid):
+    c = db.session.get(Consulta, cid)
+    if not c or c.terapeuta_id != current_user.id:
+        abort(404)
+    return c
+
+
+def meu_registro(rid):
+    r = db.session.get(Registro, rid)
+    if not r or r.terapeuta_id != current_user.id:
+        abort(404)
+    return r
+
+
+# ============================================================ filtros de template
+@app.template_filter("data_br")
+def data_br(d):
+    return d.strftime("%d/%m/%Y") if d else ""
+
+
+@app.template_filter("hora")
+def hora(d):
+    return d.strftime("%H:%M") if d else ""
+
+
+@app.template_filter("dia_curto")
+def dia_curto(d):
+    return f"{DIAS[d.weekday()]}, {d.day} {MESES[d.month - 1][:3]}" if d else ""
+
+
+@app.template_filter("dia_longo")
+def dia_longo(d):
+    return f"{DIAS_LONGOS[d.weekday()]}, {d.day} de {MESES[d.month - 1]}" if d else ""
+
+
+@app.template_filter("moeda")
+def moeda(v):
+    if v is None:
+        return ""
+    return "R$ " + f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+@app.template_filter("tempo")
+def tempo_legivel(dias):
+    if dias is None:
+        return ""
+    if dias < 30:
+        return f"{dias} dia" + ("" if dias == 1 else "s")
+    if dias < 365:
+        m = dias // 30
+        return f"{m} {'mês' if m == 1 else 'meses'}"
+    a, m = dias // 365, (dias % 365) // 30
+    txt = f"{a} ano" + ("" if a == 1 else "s")
+    return txt + (f" e {m} {'mês' if m == 1 else 'meses'}" if m else "")
+
+
+@app.template_filter("texto")
+def texto(corpo):
+    html, lista = [], False
+    for linha in (corpo or "").splitlines():
+        s = linha.strip()
+        if s.startswith("- "):
+            if not lista:
+                html.append("<ul>")
+                lista = True
+            html.append(f"<li>{escape(s[2:])}</li>")
+            continue
+        if lista:
+            html.append("</ul>")
+            lista = False
+        if s.startswith("## "):
+            html.append(f"<h3>{escape(s[3:])}</h3>")
+        elif s:
+            html.append(f"<p>{escape(s)}</p>")
+    if lista:
+        html.append("</ul>")
+    return Markup("\n".join(html))
+
+
+@app.context_processor
+def contexto():
+    saudacao = "Bom dia" if agora().hour < 12 else "Boa tarde" if agora().hour < 18 else "Boa noite"
+    return dict(csrf_token=csrf_token, HUMOR=HUMOR, RISCO=RISCO, STATUS_PACIENTE=STATUS_PACIENTE,
+                STATUS_CONSULTA=STATUS_CONSULTA, TIPO_CONSULTA=TIPO_CONSULTA, CATEGORIAS=CATEGORIAS,
+                RESULTADO_TESTE=RESULTADO_TESTE, SUBSTANCIAS=SUBSTANCIAS, GATILHOS=GATILHOS,
+                hoje=hoje(), saudacao=saudacao, ia_ativa=voz.ia_ativa(), transcricao_ativa=voz.transcricao_ativa())
+
+
+# ============================================================ regras clínicas
+def alertas(p):
+    """Motivos para o paciente aparecer em 'Pacientes em atenção'."""
+    motivos = []
+    ultimo_reg = Registro.query.filter_by(paciente_id=p.id).order_by(Registro.data.desc(), Registro.id.desc()).first()
+    if ultimo_reg and ultimo_reg.risco in ("alto", "critico"):
+        motivos.append(f"Risco {RISCO[ultimo_reg.risco].lower()} na última sessão")
+    recentes = CheckIn.query.filter_by(paciente_id=p.id).filter(CheckIn.data >= hoje() - timedelta(days=3)).all()
+    if p.ultimo_uso and (hoje() - p.ultimo_uso).days <= 7:
+        motivos.append("Uso registrado nos últimos 7 dias")
+    if any(c.fissura >= 8 for c in recentes):
+        motivos.append("Fissura muito alta no check-in")
+    if any(c.humor == 1 for c in recentes):
+        motivos.append("Humor muito baixo no check-in")
+    if p.tem_acesso:
+        ultimo = CheckIn.query.filter_by(paciente_id=p.id).order_by(CheckIn.data.desc()).first()
+        if not ultimo or (hoje() - ultimo.data).days >= 5:
+            motivos.append("Sem check-in há 5 dias ou mais")
+    return motivos
+
+
+def serie_diaria(pontos, dias=30):
+    """pontos: lista (data, valor 0–10). Retorna polyline para SVG 300x80."""
+    inicio = hoje() - timedelta(days=dias - 1)
+    por_dia = {}
+    for d, v in pontos:
+        if d >= inicio and v is not None:
+            por_dia.setdefault(d, []).append(v)
+    saida = []
+    for i in range(dias):
+        d = inicio + timedelta(days=i)
+        if d in por_dia:
+            v = sum(por_dia[d]) / len(por_dia[d])
+            saida.append(f"{round(i * 300 / (dias - 1), 1)},{round(76 - v * 7.2, 1)}")
+    return " ".join(saida)
+
+
+def feedback_ia(r):
+    """Envia só dados clínicos, sem nome, telefone ou e-mail."""
+    dados = {
+        "substancias": r.paciente.lista_substancias, "dias_sem_uso": r.paciente.dias_limpo,
+        "humor_1a5": r.humor, "ansiedade_0a10": r.ansiedade, "motivacao_0a10": r.motivacao,
+        "fissura_0a10": r.fissura, "uso_recente": r.uso_recente, "teste": r.teste_resultado if r.teste_feito else None,
+        "risco": r.risco, "abordagens": r.abordagens,
+        "observacoes": voz.anonimizar(r.comentarios or "", [r.paciente.nome]),
+    }
+    prompt = ("Você apoia um terapeuta holístico que atende pessoas em recuperação de dependência química. "
+              "Com base no registro da sessão abaixo, escreva em português do Brasil, em até 180 palavras: "
+              "1) uma leitura breve do momento do paciente; 2) pontos de atenção e sinais de risco; "
+              "3) duas ou três sugestões para a próxima sessão. Não faça diagnóstico, não sugira medicamentos "
+              "ou doses e indique encaminhamento médico ou psiquiátrico quando houver risco alto, "
+              "sinais de abstinência grave ou ideação suicida.\n\nRegistro:\n" + json.dumps(dados, ensure_ascii=False))
+    return voz.chamar_claude(prompt, max_tokens=700)
+
+
+# ============================================================ PWA
+@app.route("/manifest.webmanifest")
+def manifest():
+    return send_from_directory("static", "manifest.webmanifest", mimetype="application/manifest+json")
+
+
+@app.route("/sw.js")
+def service_worker():
+    resp = send_from_directory("static", "sw.js", mimetype="application/javascript")
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+@app.route("/offline")
+def offline():
+    return render_template("offline.html")
+
+
+# ============================================================ acesso
+@app.route("/")
+def inicio():
+    if not current_user.is_authenticated:
+        return redirect(url_for("entrar"))
+    return redirect(url_for("painel" if current_user.papel == "terapeuta" else "casa"))
+
+
+@app.route("/entrar", methods=["GET", "POST"])
+def entrar():
+    if current_user.is_authenticated:
+        return redirect(url_for("inicio"))
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        senha = request.form.get("senha", "")
+        u = Terapeuta.query.filter_by(email=email).first() or Paciente.query.filter_by(email=email).first()
+        if conferir_senha(u, senha) and (u.papel == "terapeuta" or u.status != "inativo"):
+            login_user(u, remember=True)
+            return redirect(url_for("inicio"))
+        flash("E-mail ou senha incorretos.", "erro")
+    return render_template("entrar.html")
+
+
+@app.route("/sair", methods=["POST"])
+@login_required
+def sair():
+    logout_user()
+    session.clear()
+    return redirect(url_for("entrar"))
+
+
+def email_em_uso(email, exceto=None):
+    for modelo in (Terapeuta, Paciente):
+        u = modelo.query.filter_by(email=email).first()
+        if u and u is not exceto:
+            return True
+    return False
+
+
+def validar_credenciais(email, senha, confirma, exceto=None):
+    if "@" not in email or len(email) < 5:
+        return "Informe um e-mail válido."
+    if len(senha) < 8:
+        return "A senha precisa ter pelo menos 8 caracteres."
+    if senha != confirma:
+        return "As senhas não conferem."
+    if email_em_uso(email, exceto):
+        return "Este e-mail já está cadastrado."
+    return None
+
+
+@app.route("/cadastro", methods=["GET", "POST"])
+def cadastro():
+    codigo = os.environ.get("CODIGO_CADASTRO")
+    if request.method == "POST":
+        f = request.form
+        email = f.get("email", "").strip().lower()
+        erro = validar_credenciais(email, f.get("senha", ""), f.get("confirma", ""))
+        if not f.get("nome", "").strip():
+            erro = "Informe seu nome."
+        if codigo and not secrets.compare_digest(f.get("codigo", ""), codigo):
+            erro = "Código de cadastro inválido."
+        if erro:
+            flash(erro, "erro")
+        else:
+            t = Terapeuta(nome=f["nome"].strip()[:80], email=email)
+            definir_senha(t, f["senha"])
+            db.session.add(t)
+            db.session.commit()
+            login_user(t, remember=True)
+            return redirect(url_for("painel"))
+    return render_template("cadastro.html", exige_codigo=bool(codigo))
+
+
+@app.route("/convite/<codigo>", methods=["GET", "POST"])
+def convite(codigo):
+    p = Paciente.query.filter_by(codigo_convite=codigo).first()
+    if not p or p.tem_acesso:
+        flash("Este convite já foi usado ou não existe. Peça um novo ao seu terapeuta.", "erro")
+        return redirect(url_for("entrar"))
+    if request.method == "POST":
+        f = request.form
+        email = f.get("email", "").strip().lower()
+        erro = validar_credenciais(email, f.get("senha", ""), f.get("confirma", ""), exceto=p)
+        if not f.get("aceite"):
+            erro = "Para continuar, confirme que concorda com o uso dos dados no seu acompanhamento."
+        if erro:
+            flash(erro, "erro")
+        else:
+            p.email = email
+            definir_senha(p, f["senha"])
+            p.codigo_convite = None
+            db.session.commit()
+            login_user(p, remember=True)
+            flash("Conta criada. Que bom ter você aqui.", "ok")
+            return redirect(url_for("casa"))
+    return render_template("convite.html", p=p)
+
+
+# ============================================================ terapeuta: início
+@app.route("/t")
+@exige("terapeuta")
+def painel():
+    ini = datetime.combine(hoje(), datetime.min.time())
+    consultas = (Consulta.query.filter_by(terapeuta_id=current_user.id)
+                 .filter(Consulta.inicio >= ini, Consulta.inicio < ini + timedelta(days=1))
+                 .filter(Consulta.status != "cancelada").order_by(Consulta.inicio).all())
+    ativos = Paciente.query.filter_by(terapeuta_id=current_user.id, status="ativo").all()
+    atencao = [(p, m) for p in ativos if (m := alertas(p))]
+    recentes = (Registro.query.filter_by(terapeuta_id=current_user.id)
+                .order_by(Registro.data.desc(), Registro.id.desc()).limit(5).all())
+    n_recentes = Registro.query.filter_by(terapeuta_id=current_user.id).filter(Registro.data >= hoje() - timedelta(days=7)).count()
+    return render_template("terapeuta/painel.html", consultas=consultas, atencao=atencao,
+                           ativos=len(ativos), recentes=recentes, n_recentes=n_recentes)
+
+
+@app.route("/t/estoque", methods=["POST"])
+@exige("terapeuta")
+def estoque():
+    acao = request.form.get("acao")
+    if acao == "mais":
+        current_user.estoque_testes += 1
+    elif acao == "menos":
+        current_user.estoque_testes = max(0, current_user.estoque_testes - 1)
+    elif acao == "definir":
+        current_user.estoque_testes = para_int(request.form.get("qtd"), current_user.estoque_testes, 0)
+        current_user.estoque_minimo = para_int(request.form.get("minimo"), current_user.estoque_minimo, 0)
+    db.session.commit()
+    return redirect(url_for("painel") + "#estoque")
+
+
+# ============================================================ terapeuta: pacientes
+@app.route("/t/pacientes")
+@exige("terapeuta")
+def pacientes():
+    q = request.args.get("q", "").strip()
+    st = request.args.get("status", "ativo")
+    consulta = Paciente.query.filter_by(terapeuta_id=current_user.id)
+    if q:
+        consulta = consulta.filter(Paciente.nome.ilike(f"%{q}%"))
+    if st in STATUS_PACIENTE:
+        consulta = consulta.filter_by(status=st)
+    return render_template("terapeuta/pacientes.html", lista=consulta.order_by(Paciente.nome).all(), q=q, st=st)
+
+
+def salvar_paciente(p, f):
+    p.nome = f.get("nome", "").strip()[:100]
+    p.nascimento = para_data(f.get("nascimento"))
+    p.telefone = f.get("telefone", "").strip()[:30] or None
+    email = f.get("email", "").strip().lower() or None
+    if email and email_em_uso(email, exceto=p):
+        return "Este e-mail já está em uso por outra conta."
+    if not p.tem_acesso:
+        p.email = email
+    subs = [s for s in f.getlist("substancias") if s in SUBSTANCIAS]
+    outra = f.get("substancia_outra", "").strip()
+    if outra:
+        subs = [s for s in subs if s != "Outra"] + [outra[:40]]
+    p.substancias = "|".join(subs) or None
+    p.tempo_uso = f.get("tempo_uso", "").strip()[:60] or None
+    p.status = f.get("status") if f.get("status") in STATUS_PACIENTE else "ativo"
+    p.inicio_tratamento = para_data(f.get("inicio_tratamento"))
+    p.ultimo_uso = para_data(f.get("ultimo_uso"))
+    p.sessoes_semana = para_int(f.get("sessoes_semana"), 1, 0, 14)
+    p.valor_sessao = para_float(f.get("valor_sessao"))
+    p.horario_pref = f.get("horario_pref", "").strip()[:80] or None
+    p.emergencia_nome = f.get("emergencia_nome", "").strip()[:80] or None
+    p.emergencia_tel = f.get("emergencia_tel", "").strip()[:30] or None
+    p.anamnese = f.get("anamnese", "").strip() or None
+    if not p.nome:
+        return "Informe o nome do paciente."
+    return None
+
+
+@app.route("/t/pacientes/novo", methods=["GET", "POST"])
+@app.route("/t/pacientes/<int:pid>/editar", methods=["GET", "POST"])
+@exige("terapeuta")
+def paciente_form(pid=None):
+    p = meu_paciente(pid) if pid else Paciente(terapeuta_id=current_user.id, status="ativo", sessoes_semana=1)
+    if request.method == "POST":
+        erro = salvar_paciente(p, request.form)
+        if erro:
+            flash(erro, "erro")
+        else:
+            db.session.add(p)
+            db.session.commit()
+            flash("Paciente salvo.", "ok")
+            return redirect(url_for("paciente_detalhe", pid=p.id))
+    return render_template("terapeuta/paciente_form.html", p=p)
+
+
+@app.route("/t/pacientes/<int:pid>")
+@exige("terapeuta")
+def paciente_detalhe(pid):
+    p = meu_paciente(pid)
+    registros = Registro.query.filter_by(paciente_id=p.id).order_by(Registro.data.desc(), Registro.id.desc()).all()
+    checkins = CheckIn.query.filter_by(paciente_id=p.id).order_by(CheckIn.data.desc()).limit(60).all()
+    proximas = (Consulta.query.filter_by(paciente_id=p.id, status="agendada")
+                .filter(Consulta.inicio >= agora() - timedelta(hours=2)).order_by(Consulta.inicio).limit(3).all())
+    pagamentos = Pagamento.query.filter_by(paciente_id=p.id).order_by(Pagamento.data.desc()).limit(10).all()
+    feitas, prox = p.conquistas()
+    pontos = [(c.data, c.fissura) for c in checkins] + [(r.data, r.fissura) for r in registros]
+    link = url_for("convite", codigo=p.codigo_convite, _external=True) if p.codigo_convite and not p.tem_acesso else None
+    return render_template("terapeuta/paciente.html", p=p, registros=registros[:10], checkins=checkins[:7],
+                           proximas=proximas, pagamentos=pagamentos, feitas=feitas, prox=prox,
+                           grafico=serie_diaria(pontos), saldo=p.saldo_sessoes(), link=link, motivos=alertas(p),
+                           consentimento=consentimento_ativo(p))
+
+
+@app.route("/t/pacientes/<int:pid>/convite", methods=["POST"])
+@exige("terapeuta")
+def gerar_convite(pid):
+    p = meu_paciente(pid)
+    if p.tem_acesso:
+        flash("Este paciente já tem acesso ao app.", "erro")
+    else:
+        p.codigo_convite = secrets.token_urlsafe(16)
+        db.session.commit()
+        flash("Link de convite gerado. Envie para o paciente.", "ok")
+    return redirect(url_for("paciente_detalhe", pid=p.id) + "#acesso")
+
+
+@app.route("/t/pacientes/<int:pid>/pagamento", methods=["POST"])
+@exige("terapeuta")
+def novo_pagamento(pid):
+    p = meu_paciente(pid)
+    valor = para_float(request.form.get("valor"))
+    if not valor or valor <= 0:
+        flash("Informe o valor recebido.", "erro")
+    else:
+        db.session.add(Pagamento(paciente_id=p.id, valor=valor,
+                                 sessoes=para_int(request.form.get("sessoes"), 1, 0, 100),
+                                 data=para_data(request.form.get("data")) or hoje(),
+                                 nota=request.form.get("nota", "").strip()[:200] or None))
+        db.session.commit()
+        flash("Pagamento registrado.", "ok")
+    return redirect(url_for("paciente_detalhe", pid=p.id) + "#pagamentos")
+
+
+# ============================================================ terapeuta: agenda
+@app.route("/t/agenda")
+@exige("terapeuta")
+def agenda():
+    dia = para_data(request.args.get("dia")) or hoje()
+    segunda = dia - timedelta(days=dia.weekday())
+    semana = [segunda + timedelta(days=i) for i in range(7)]
+    ini = datetime.combine(segunda, datetime.min.time())
+    consultas = (Consulta.query.filter_by(terapeuta_id=current_user.id)
+                 .filter(Consulta.inicio >= ini, Consulta.inicio < ini + timedelta(days=7))
+                 .order_by(Consulta.inicio).all())
+    com_consulta = {c.inicio.date() for c in consultas if c.status != "cancelada"}
+    do_dia = [c for c in consultas if c.inicio.date() == dia]
+    return render_template("terapeuta/agenda.html", dia=dia, semana=semana, do_dia=do_dia,
+                           com_consulta=com_consulta, anterior=segunda - timedelta(days=7),
+                           proxima=segunda + timedelta(days=7))
+
+
+@app.route("/t/agenda/nova", methods=["GET", "POST"])
+@app.route("/t/agenda/<int:cid>/editar", methods=["GET", "POST"])
+@exige("terapeuta")
+def consulta_form(cid=None):
+    c = minha_consulta(cid) if cid else Consulta(terapeuta_id=current_user.id, duracao=50, tipo="individual",
+                                                 status="agendada", paciente_id=para_int(request.args.get("paciente")))
+    lista = (Paciente.query.filter_by(terapeuta_id=current_user.id)
+             .filter(Paciente.status.in_(["ativo", "pausado"])).order_by(Paciente.nome).all())
+    if request.method == "POST":
+        f = request.form
+        p = db.session.get(Paciente, para_int(f.get("paciente"), 0))
+        try:
+            inicio = datetime.fromisoformat(f"{f['data']}T{f['hora']}")
+        except (KeyError, ValueError):
+            inicio = None
+        if not p or p.terapeuta_id != current_user.id or not inicio:
+            flash("Escolha o paciente, a data e o horário.", "erro")
+        else:
+            c.paciente_id, c.inicio = p.id, inicio
+            c.duracao = para_int(f.get("duracao"), 50, 10, 240)
+            c.tipo = f.get("tipo") if f.get("tipo") in TIPO_CONSULTA else "individual"
+            c.status = f.get("status") if f.get("status") in STATUS_CONSULTA else "agendada"
+            c.notas_pre = f.get("notas_pre", "").strip() or None
+            db.session.add(c)
+            db.session.commit()
+            flash("Sessão salva.", "ok")
+            return redirect(url_for("agenda", dia=c.inicio.date().isoformat()))
+    padrao = c.inicio or datetime.combine(para_data(request.args.get("dia")) or hoje(), datetime.min.time()).replace(hour=9)
+    return render_template("terapeuta/consulta_form.html", c=c, pacientes=lista, padrao=padrao)
+
+
+@app.route("/t/agenda/<int:cid>/excluir", methods=["POST"])
+@exige("terapeuta")
+def excluir_consulta(cid):
+    c = minha_consulta(cid)
+    dia = c.inicio.date().isoformat()
+    if c.registro:
+        c.registro.consulta_id = None
+    db.session.delete(c)
+    db.session.commit()
+    flash("Sessão excluída.", "ok")
+    return redirect(url_for("agenda", dia=dia))
+
+
+# ============================================================ terapeuta: registros
+@app.route("/t/registros")
+@exige("terapeuta")
+def registros():
+    q = request.args.get("q", "").strip()
+    risco = request.args.get("risco", "")
+    consulta = Registro.query.filter_by(terapeuta_id=current_user.id).join(Paciente)
+    if q:
+        consulta = consulta.filter(Paciente.nome.ilike(f"%{q}%"))
+    if risco in RISCO:
+        consulta = consulta.filter(Registro.risco == risco)
+    ativos = Paciente.query.filter_by(terapeuta_id=current_user.id, status="ativo").all()
+    atencao = [(p, m) for p in ativos if (m := alertas(p))]
+    return render_template("terapeuta/registros.html", lista=consulta.order_by(Registro.data.desc(), Registro.id.desc()).limit(100).all(),
+                           q=q, risco=risco, atencao=atencao)
+
+
+@app.route("/t/agenda/<int:cid>/registro", methods=["GET", "POST"])
+@app.route("/t/pacientes/<int:pid>/registro", methods=["GET", "POST"])
+@app.route("/t/registros/<int:rid>/editar", methods=["GET", "POST"])
+@exige("terapeuta")
+def registro_form(cid=None, pid=None, rid=None):
+    if rid:
+        r = meu_registro(rid)
+    elif cid:
+        c = minha_consulta(cid)
+        r = c.registro or Registro(terapeuta_id=current_user.id, paciente_id=c.paciente_id, consulta_id=c.id,
+                                   data=c.inicio.date(), risco="baixo", realizada=True)
+    else:
+        p = meu_paciente(pid)
+        r = Registro(terapeuta_id=current_user.id, paciente_id=p.id, data=hoje(), risco="baixo", realizada=True)
+    paciente = db.session.get(Paciente, r.paciente_id)
+    t = None
+    tid = para_int(request.values.get("transcricao"))
+    if tid:
+        t = db.session.get(Transcricao, tid)
+        if not t or t.terapeuta_id != current_user.id or t.paciente_id != r.paciente_id:
+            abort(404)
+    if request.method == "GET" and t and t.dados:
+        d = t.dados
+        for campo in ("humor", "ansiedade", "motivacao", "fissura", "abordagens", "tarefa_paciente"):
+            if d.get(campo) not in (None, ""):
+                setattr(r, campo, d[campo])
+        if d.get("uso_recente") is not None:
+            r.uso_recente = d["uso_recente"]
+        r.risco = d.get("risco") or r.risco
+        resumo = d.get("resumo", "")
+        r.comentarios = (r.comentarios + "\n\n" + resumo) if r.comentarios else resumo
+    if request.method == "POST":
+        f = request.form
+        teste_antes = bool(r.teste_feito)
+        r.realizada = f.get("realizada", "1") == "1"
+        r.data = para_data(f.get("data")) or r.data
+        r.humor = para_int(f.get("humor"), None, 1, 5)
+        r.ansiedade = para_int(f.get("ansiedade"), None, 0, 10)
+        r.motivacao = para_int(f.get("motivacao"), None, 0, 10)
+        r.fissura = para_int(f.get("fissura"), None, 0, 10)
+        r.uso_recente = f.get("uso_recente") == "1"
+        r.data_uso = para_data(f.get("data_uso")) if r.uso_recente else None
+        r.teste_feito = f.get("teste_feito") == "1"
+        r.teste_resultado = f.get("teste_resultado") if r.teste_feito and f.get("teste_resultado") in RESULTADO_TESTE else None
+        r.risco = f.get("risco") if f.get("risco") in RISCO else "baixo"
+        r.abordagens = f.get("abordagens", "").strip()[:200] or None
+        r.comentarios = f.get("comentarios", "").strip() or None
+        r.tarefa_paciente = f.get("tarefa_paciente", "").strip()[:300] or None
+        if r.uso_recente:
+            paciente.registrar_uso(r.data_uso or r.data)
+        if r.teste_feito and r.teste_resultado == "positivo":
+            paciente.registrar_uso(r.data)
+        if r.teste_feito and not teste_antes:
+            current_user.estoque_testes = max(0, current_user.estoque_testes - 1)
+        consulta = db.session.get(Consulta, r.consulta_id) if r.consulta_id else None
+        if consulta:
+            consulta.status = "realizada" if r.realizada else "faltou"
+        db.session.add(r)
+        db.session.flush()
+        if t:
+            t.registro_id, t.status = r.id, "revisada"
+        db.session.commit()
+        if r.teste_feito and not teste_antes and current_user.estoque_testes < current_user.estoque_minimo:
+            flash(f"Registro salvo. Restam {current_user.estoque_testes} testes toxicológicos; hora de repor.", "aviso")
+        else:
+            flash("Registro salvo.", "ok")
+        return redirect(url_for("registro_detalhe", rid=r.id))
+    cons = db.session.get(Consulta, r.consulta_id) if r.consulta_id else None
+    return render_template("terapeuta/registro_form.html", r=r, p=paciente, t=t, cons=cons)
+
+
+@app.route("/t/registros/<int:rid>")
+@exige("terapeuta")
+def registro_detalhe(rid):
+    r = meu_registro(rid)
+    t = Transcricao.query.filter_by(registro_id=r.id).first()
+    return render_template("terapeuta/registro.html", r=r, t=t)
+
+
+@app.route("/t/registros/<int:rid>/ia", methods=["POST"])
+@exige("terapeuta")
+def registro_ia(rid):
+    r = meu_registro(rid)
+    try:
+        texto_ia = feedback_ia(r)
+    except voz.ErroVoz as e:
+        texto_ia = None
+        flash(f"{e} Tente de novo em alguns minutos.", "erro")
+    if texto_ia:
+        r.feedback_ia = texto_ia
+        db.session.commit()
+        flash("Feedback gerado. Revise antes de usar: é uma sugestão, não um parecer.", "ok")
+    return redirect(url_for("registro_detalhe", rid=r.id) + "#ia")
+
+
+@app.route("/t/registros/<int:rid>/excluir", methods=["POST"])
+@exige("terapeuta")
+def excluir_registro(rid):
+    r = meu_registro(rid)
+    pid = r.paciente_id
+    db.session.delete(r)
+    db.session.commit()
+    flash("Registro excluído.", "ok")
+    return redirect(url_for("paciente_detalhe", pid=pid))
+
+
+# ============================================================ consentimento de gravação
+TIPOS_CONTRATO = {"application/pdf": "pdf", "image/jpeg": "jpg", "image/png": "png", "image/heic": "heic", "image/webp": "webp"}
+
+
+@app.route("/t/pacientes/<int:pid>/consentimento", methods=["POST"])
+@exige("terapeuta")
+def novo_consentimento(pid):
+    p = meu_paciente(pid)
+    arq = request.files.get("arquivo")
+    assinado = para_data(request.form.get("assinado_em"))
+    if not assinado or not arq or not arq.filename:
+        flash("Informe a data da assinatura e anexe o termo assinado (PDF ou foto).", "erro")
+        return redirect(url_for("paciente_detalhe", pid=p.id) + "#gravacao")
+    if arq.mimetype not in TIPOS_CONTRATO:
+        flash("Envie o termo em PDF, JPG, PNG ou HEIC.", "erro")
+        return redirect(url_for("paciente_detalhe", pid=p.id) + "#gravacao")
+    dados = arq.read()
+    if len(dados) > 10 * 1024 * 1024:
+        flash("O arquivo do termo passa de 10 MB. Envie uma versão menor.", "erro")
+        return redirect(url_for("paciente_detalhe", pid=p.id) + "#gravacao")
+    for antigo in Consentimento.query.filter_by(paciente_id=p.id, revogado_em=None):
+        antigo.revogado_em = hoje()
+    db.session.add(Consentimento(paciente_id=p.id, terapeuta_id=current_user.id, assinado_em=assinado,
+                                 versao=request.form.get("versao", "").strip()[:40] or None, arquivo=dados,
+                                 arquivo_tipo=arq.mimetype, arquivo_nome=f"termo-{p.id}-{assinado.isoformat()}.{TIPOS_CONTRATO[arq.mimetype]}"))
+    db.session.commit()
+    flash("Termo de consentimento anexado. A gravação da sessão está liberada para este paciente.", "ok")
+    return redirect(url_for("paciente_detalhe", pid=p.id) + "#gravacao")
+
+
+@app.route("/t/consentimentos/<int:cid>/arquivo")
+@exige("terapeuta")
+def arquivo_consentimento(cid):
+    c = db.session.get(Consentimento, cid)
+    if not c or c.terapeuta_id != current_user.id or not c.arquivo:
+        abort(404)
+    return Response(c.arquivo, mimetype=c.arquivo_tipo, headers={
+        "Content-Disposition": f'inline; filename="{c.arquivo_nome}"', "Cache-Control": "no-store"})
+
+
+@app.route("/t/consentimentos/<int:cid>/revogar", methods=["POST"])
+@exige("terapeuta")
+def revogar_consentimento(cid):
+    c = db.session.get(Consentimento, cid)
+    if not c or c.terapeuta_id != current_user.id:
+        abort(404)
+    c.revogado_em = hoje()
+    db.session.commit()
+    flash("Consentimento revogado. Novas gravações de sessão ficam bloqueadas para este paciente.", "ok")
+    return redirect(url_for("paciente_detalhe", pid=c.paciente_id) + "#gravacao")
+
+
+# ============================================================ fim de sessão (gravação e transcrição)
+@app.route("/t/fim")
+@exige("terapeuta")
+def fim_sessao():
+    ini = datetime.combine(hoje() - timedelta(days=2), datetime.min.time())
+    recentes = (Consulta.query.filter_by(terapeuta_id=current_user.id)
+                .filter(Consulta.inicio >= ini, Consulta.inicio <= agora() + timedelta(hours=12))
+                .filter(Consulta.status.in_(["agendada", "realizada"]))
+                .order_by(Consulta.inicio.desc()).all())
+    sem_registro = [c for c in recentes if not c.registro]
+    lista = (Paciente.query.filter_by(terapeuta_id=current_user.id)
+             .filter(Paciente.status.in_(["ativo", "pausado"])).order_by(Paciente.nome).all())
+    pendentes = (Transcricao.query.filter_by(terapeuta_id=current_user.id)
+                 .filter(Transcricao.status.in_(["pronta", "erro", "gravando"]))
+                 .order_by(Transcricao.criado_em.desc()).limit(20).all())
+    consentidos = {c.paciente_id for c in Consentimento.query.filter_by(terapeuta_id=current_user.id, revogado_em=None)}
+    sel_c = para_int(request.args.get("consulta"))
+    sel_p = para_int(request.args.get("paciente"))
+    if not sel_c and not sel_p and sem_registro:
+        agora_ = agora()
+        passadas = [c for c in sem_registro if c.inicio <= agora_]
+        sel_c = (passadas[0] if passadas else sem_registro[-1]).id
+    return render_template("terapeuta/fim.html", sem_registro=sem_registro, pacientes=lista, pendentes=pendentes,
+                           consentidos=consentidos, sel_c=sel_c, sel_p=sel_p)
+
+
+def minha_transcricao(tid):
+    t = db.session.get(Transcricao, tid)
+    if not t or t.terapeuta_id != current_user.id:
+        abort(404)
+    return t
+
+
+@app.route("/t/gravacao/nova", methods=["POST"])
+@exige("terapeuta")
+def gravacao_nova():
+    f = request.form
+    tipo = f.get("tipo") if f.get("tipo") in ("resumo", "consulta") else "resumo"
+    c = None
+    if f.get("consulta"):
+        c = minha_consulta(para_int(f.get("consulta"), 0))
+        p = c.paciente
+    else:
+        p = meu_paciente(para_int(f.get("paciente"), 0))
+    if not voz.transcricao_ativa():
+        return jsonify(erro="A transcrição não está configurada. Veja o README para ativar."), 400
+    if tipo == "consulta":
+        if not consentimento_ativo(p):
+            return jsonify(erro="Este paciente não tem termo de consentimento ativo. Anexe o termo na ficha dele."), 403
+        if f.get("avisado") != "1":
+            return jsonify(erro="Confirme que avisou o paciente de que a gravação vai começar."), 400
+    t = Transcricao(terapeuta_id=current_user.id, paciente_id=p.id, consulta_id=c.id if c else None, tipo=tipo)
+    db.session.add(t)
+    db.session.commit()
+    return jsonify(id=t.id)
+
+
+@app.route("/t/gravacao/<int:tid>/parte", methods=["POST"])
+@exige("terapeuta")
+def gravacao_parte(tid):
+    t = minha_transcricao(tid)
+    audio = request.files.get("audio")
+    if not audio:
+        return jsonify(erro="Nenhum áudio recebido."), 400
+    nome, tipo = audio.filename or "audio.m4a", audio.mimetype
+    dados = audio.read()
+    audio.close()
+    try:
+        texto_parte = voz.transcrever(dados, nome, tipo)
+    except voz.ErroVoz as e:
+        t.falhas += 1
+        db.session.commit()
+        return jsonify(erro=str(e)), 502
+    finally:
+        del dados  # o áudio não é guardado em lugar nenhum
+    t.partes += 1
+    t.segundos += para_int(request.form.get("segundos"), 0, 0, 36000)
+    if texto_parte:
+        t.texto = ((t.texto or "") + ("\n\n" if t.texto else "") + texto_parte)
+    db.session.commit()
+    return jsonify(ok=True, partes=t.partes, caracteres=len(t.texto or ""))
+
+
+@app.route("/t/gravacao/<int:tid>/concluir", methods=["POST"])
+@exige("terapeuta")
+def gravacao_concluir(tid):
+    t = minha_transcricao(tid)
+    if not (t.texto or "").strip():
+        t.status, t.erro = "erro", "Nenhuma fala foi reconhecida na gravação."
+        db.session.commit()
+        return jsonify(url=url_for("gravacao_ver", tid=t.id))
+    if voz.ia_ativa():
+        try:
+            dados = voz.resumir(voz.anonimizar(t.texto, [t.paciente.nome]), t.tipo)
+            t.sugestao, t.erro = json.dumps(dados, ensure_ascii=False), None
+        except voz.ErroVoz as e:
+            t.erro = str(e)
+    t.status = "pronta"
+    db.session.commit()
+    return jsonify(url=url_for("gravacao_ver", tid=t.id))
+
+
+@app.route("/t/gravacao/<int:tid>/resumir", methods=["POST"])
+@exige("terapeuta")
+def gravacao_resumir(tid):
+    t = minha_transcricao(tid)
+    try:
+        dados = voz.resumir(voz.anonimizar(t.texto or "", [t.paciente.nome]), t.tipo)
+        t.sugestao, t.erro, t.status = json.dumps(dados, ensure_ascii=False), None, "pronta"
+        flash("Resumo gerado.", "ok")
+    except voz.ErroVoz as e:
+        t.erro = str(e)
+        flash(str(e), "erro")
+    db.session.commit()
+    return redirect(url_for("gravacao_ver", tid=t.id))
+
+
+@app.route("/t/gravacao/<int:tid>")
+@exige("terapeuta")
+def gravacao_ver(tid):
+    t = minha_transcricao(tid)
+    if t.registro_id:
+        return redirect(url_for("registro_detalhe", rid=t.registro_id))
+    if t.consulta_id:
+        destino = url_for("registro_form", cid=t.consulta_id, transcricao=t.id)
+    else:
+        destino = url_for("registro_form", pid=t.paciente_id, transcricao=t.id)
+    return render_template("terapeuta/gravacao.html", t=t, destino=destino)
+
+
+@app.route("/t/gravacao/<int:tid>/excluir", methods=["POST"])
+@exige("terapeuta")
+def gravacao_excluir(tid):
+    t = minha_transcricao(tid)
+    db.session.delete(t)
+    db.session.commit()
+    flash("Transcrição excluída.", "ok")
+    return redirect(url_for("fim_sessao"))
+
+
+@app.errorhandler(413)
+def muito_grande(e):
+    if request.path.startswith("/t/gravacao"):
+        return jsonify(erro="Arquivo de áudio grande demais (máximo 25 MB)."), 413
+    flash("Arquivo grande demais.", "erro")
+    return redirect(request.referrer or url_for("inicio"))
+
+
+# ============================================================ terapeuta: mood
+@app.route("/t/mood")
+@exige("terapeuta")
+def mood():
+    periodo = para_int(request.args.get("dias"), 30)
+    if periodo not in (7, 30, 90):
+        periodo = 30
+    pid = para_int(request.args.get("paciente"))
+    inicio = hoje() - timedelta(days=periodo - 1)
+    lista = Paciente.query.filter_by(terapeuta_id=current_user.id).order_by(Paciente.nome).all()
+    ids = [p.id for p in lista if not pid or p.id == pid]
+    regs = Registro.query.filter(Registro.paciente_id.in_(ids), Registro.data >= inicio, Registro.humor.isnot(None)).all()
+    cks = CheckIn.query.filter(CheckIn.paciente_id.in_(ids), CheckIn.data >= inicio).all()
+    todos = [(x.data, x.humor) for x in regs] + [(x.data, x.humor) for x in cks]
+    contagem = {n: sum(1 for _, h in todos if h == n) for n in HUMOR}
+    total = len(todos)
+    media = round(sum(h for _, h in todos) / total, 1) if total else None
+    linha = serie_diaria([(d, (h - 1) * 2.5) for d, h in todos], dias=periodo)
+    return render_template("terapeuta/mood.html", contagem=contagem, total=total, media=media, linha=linha,
+                           pacientes=lista, pid=pid, periodo=periodo)
+
+
+# ============================================================ biblioteca (terapeuta edita)
+@app.route("/t/biblioteca/novo", methods=["GET", "POST"])
+@app.route("/t/biblioteca/<int:aid>/editar", methods=["GET", "POST"])
+@exige("terapeuta")
+def artigo_form(aid=None):
+    a = db.session.get(Artigo, aid) if aid else Artigo(categoria="pratica", publicado=True)
+    if aid and (not a or a.autor_id != current_user.id):
+        abort(404)
+    if request.method == "POST":
+        f = request.form
+        if not f.get("titulo", "").strip() or not f.get("corpo", "").strip():
+            flash("Título e texto são obrigatórios.", "erro")
+        else:
+            a.titulo, a.resumo = f["titulo"].strip()[:140], f.get("resumo", "").strip()[:300]
+            a.corpo = f["corpo"].strip()
+            a.categoria = f.get("categoria") if f.get("categoria") in CATEGORIAS else "pratica"
+            a.publicado, a.autor_id = f.get("publicado") == "1", current_user.id
+            db.session.add(a)
+            db.session.commit()
+            flash("Conteúdo salvo.", "ok")
+            return redirect(url_for("artigo", aid=a.id))
+    return render_template("terapeuta/artigo_form.html", a=a)
+
+
+# ============================================================ paciente
+@app.route("/p")
+@exige("paciente")
+def casa():
+    p = current_user
+    ck = CheckIn.query.filter_by(paciente_id=p.id, data=hoje()).first()
+    proxima = (Consulta.query.filter_by(paciente_id=p.id, status="agendada").filter(Consulta.inicio >= agora())
+               .order_by(Consulta.inicio).first())
+    tarefa = (Registro.query.filter_by(paciente_id=p.id).filter(Registro.tarefa_paciente.isnot(None))
+              .order_by(Registro.data.desc(), Registro.id.desc()).first())
+    feitas, prox = p.conquistas()
+    return render_template("paciente/casa.html", ck=ck, proxima=proxima, tarefa=tarefa, feitas=feitas, prox=prox)
+
+
+@app.route("/p/checkin", methods=["GET", "POST"])
+@exige("paciente")
+def checkin():
+    p = current_user
+    ck = CheckIn.query.filter_by(paciente_id=p.id, data=hoje()).first()
+    if request.method == "POST":
+        f = request.form
+        humor, fissura = para_int(f.get("humor"), None, 1, 5), para_int(f.get("fissura"), None, 0, 10)
+        if humor is None or fissura is None:
+            flash("Escolha como você está e o nível de fissura.", "erro")
+            return redirect(url_for("checkin"))
+        ck = ck or CheckIn(paciente_id=p.id, data=hoje())
+        ck.humor, ck.fissura = humor, fissura
+        ck.sono = para_int(f.get("sono"), None, 1, 5)
+        ck.usou = f.get("usou") == "1"
+        ck.gatilhos = ", ".join(g for g in f.getlist("gatilhos") if g in GATILHOS) or None
+        ck.nota = f.get("nota", "").strip() or None
+        if ck.usou:
+            p.registrar_uso(hoje())
+        db.session.add(ck)
+        db.session.commit()
+        if ck.usou:
+            flash("Obrigado pela honestidade. Um deslize não apaga o caminho que você já fez. Fale com seu terapeuta.", "ok")
+        elif fissura >= 7:
+            flash("A fissura vem em ondas e passa. Vamos respirar juntos por alguns minutos.", "ok")
+            return redirect(url_for("respirar"))
+        else:
+            flash("Check-in salvo.", "ok")
+        return redirect(url_for("casa"))
+    return render_template("paciente/checkin.html", ck=ck)
+
+
+@app.route("/p/diario")
+@exige("paciente")
+def diario():
+    cks = CheckIn.query.filter_by(paciente_id=current_user.id).order_by(CheckIn.data.desc()).limit(60).all()
+    consultas = (Consulta.query.filter_by(paciente_id=current_user.id).filter(Consulta.inicio >= agora())
+                 .filter(Consulta.status == "agendada").order_by(Consulta.inicio).limit(5).all())
+    tarefas = (Registro.query.filter_by(paciente_id=current_user.id).filter(Registro.tarefa_paciente.isnot(None))
+               .order_by(Registro.data.desc()).limit(10).all())
+    return render_template("paciente/diario.html", checkins=cks[:30], consultas=consultas, tarefas=tarefas,
+                           grafico=serie_diaria([(c.data, c.fissura) for c in cks]))
+
+
+# ============================================================ compartilhado
+def artigos_visiveis():
+    if current_user.papel == "paciente":
+        return Artigo.query.filter(Artigo.publicado.is_(True),
+                                   (Artigo.autor_id.is_(None)) | (Artigo.autor_id == current_user.terapeuta_id))
+    return Artigo.query.filter((Artigo.autor_id.is_(None)) | (Artigo.autor_id == current_user.id))
+
+
+@app.route("/biblioteca")
+@login_required
+def biblioteca():
+    cat = request.args.get("c")
+    q = artigos_visiveis()
+    if cat in CATEGORIAS:
+        q = q.filter_by(categoria=cat)
+    return render_template("biblioteca.html", artigos=q.order_by(Artigo.titulo).all(), cat=cat)
+
+
+@app.route("/biblioteca/<int:aid>")
+@login_required
+def artigo(aid):
+    a = artigos_visiveis().filter(Artigo.id == aid).first() or abort(404)
+    return render_template("artigo.html", a=a)
+
+
+@app.route("/respirar")
+@login_required
+def respirar():
+    return render_template("respirar.html")
+
+
+@app.route("/ajuda")
+@login_required
+def ajuda():
+    return render_template("ajuda.html")
+
+
+@app.errorhandler(400)
+@app.errorhandler(403)
+@app.errorhandler(404)
+def erro(e):
+    return render_template("erro.html", e=e), e.code
+
+
+# ============================================================ inicialização
+def iniciar_banco():
+    with app.app_context():
+        db.create_all()
+        if Artigo.query.filter_by(autor_id=None).count() == 0:
+            from conteudo_base import ARTIGOS
+            for a in ARTIGOS:
+                db.session.add(Artigo(autor_id=None, **a))
+            db.session.commit()
+
+
+iniciar_banco()
+
+if __name__ == "__main__":
+    app.run(debug=DEV, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))

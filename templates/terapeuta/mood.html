@@ -1,0 +1,29 @@
+{% extends "base.html" %}{% from "_itens.html" import grafico  with context %}
+{% block conteudo %}
+<header class="topo"><div><h1>Mood</h1><div class="sub">Evolução emocional dos pacientes</div></div></header>
+<main class="pagina">
+  <nav class="filtros" aria-label="Seções"><a href="{{ url_for('registros') }}">Registros</a><a class="ativo" href="{{ url_for('mood') }}">Mood</a></nav>
+  <form method="get" class="duas" style="margin-bottom:16px">
+    <select name="dias" aria-label="Período" onchange="this.form.submit()">
+      {% for d, rot in [(7,'Últimos 7 dias'),(30,'Últimos 30 dias'),(90,'Últimos 90 dias')] %}<option value="{{ d }}" {{ 'selected' if periodo == d }}>{{ rot }}</option>{% endfor %}
+    </select>
+    <select name="paciente" aria-label="Paciente" onchange="this.form.submit()">
+      <option value="">Todos os pacientes</option>
+      {% for p in pacientes %}<option value="{{ p.id }}" {{ 'selected' if pid == p.id }}>{{ p.nome }}</option>{% endfor %}
+    </select>
+  </form>
+  {% if total %}
+  <div class="distribuicao">
+    {% for n in [5,4,3,2,1] %}<div><em>{{ HUMOR[n][0] }}</em><b>{{ contagem[n] }}</b><small>{{ HUMOR[n][1] }}<br>{{ (contagem[n] * 100 / total)|round|int }}%</small></div>{% endfor %}
+  </div>
+  <div class="barras" aria-hidden="true">
+    {% for n, cor in [(5,'var(--verde)'),(4,'#6FBF8E'),(3,'var(--ambar)'),(2,'#E08A5A'),(1,'var(--vermelho)')] %}<span style="width:{{ contagem[n] * 100 / total }}%;background:{{ cor }}"></span>{% endfor %}
+  </div>
+  <div class="secao"><h2>Tendência</h2><span style="color:var(--apagado)">Média {{ media }} de 5</span></div>
+  <div class="cartao">{{ grafico(linha, 'Humor', periodo) }}<p class="meta" style="margin:8px 0 0;color:var(--apagado)">Média diária do humor, somando registros de sessão e check-ins dos pacientes.</p></div>
+  <p style="color:var(--apagado);font-size:.9rem;margin-top:12px">{{ total }} registros de humor no período.</p>
+  {% else %}
+  <div class="vazio">Nenhum registro de humor no período.<br>O humor entra aqui pelos registros de sessão e pelos check-ins dos pacientes.</div>
+  {% endif %}
+</main>
+{% endblock %}

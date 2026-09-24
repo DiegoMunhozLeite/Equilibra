@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div><h1>Fim de sessão</h1><div class="sub">Fale como foi. A IA transcreve, resume e preenche o registro.</div></div></header>
+<main class="pagina">
+{% if not transcricao_ativa %}
+  <div class="aviso-caixa">A transcrição ainda não está ativa neste servidor. Configure a chave do serviço de voz (veja o README). Enquanto isso, você pode <a href="{{ url_for('registros') }}">registrar por escrito</a>.</div>
+{% endif %}
+
+<section id="config" {{ 'hidden' if not transcricao_ativa }}>
+  <div class="campo" style="margin-top:0"><label for="alvo">Sessão ou paciente</label>
+    <select id="alvo">
+      {% if sem_registro %}<optgroup label="Sessões sem registro">
+        {% for c in sem_registro %}<option value="c{{ c.id }}" data-paciente="{{ c.paciente_id }}" {{ 'selected' if sel_c == c.id }}>{{ c.paciente.nome }} · {{ c.inicio.date()|dia_curto }} {{ c.inicio|hora }}</option>{% endfor %}
+      </optgroup>{% endif %}
+      <optgroup label="Sem sessão agendada">
+        {% for p in pacientes %}<option value="p{{ p.id }}" data-paciente="{{ p.id }}" {{ 'selected' if sel_p == p.id and not sel_c }}>{{ p.nome }}</option>{% endfor %}
+      </optgroup>
+    </select></div>
+
+  <div class="campo"><span class="rot">O que você vai gravar</span>
+    <div class="escolhas" role="radiogroup">
+      <label><input type="radio" name="tipo" value="resumo" checked><span>Meu relato do fim de sessão</span></label>
+      <label><input type="radio" name="tipo" value="consulta"><span>A sessão inteira</span></label>
+    </div></div>
+
+  <div id="sem-termo" class="aviso-caixa" style="margin-top:12px" hidden>Este paciente não tem termo de consentimento de gravação ativo. <a id="link-termo" href="#">Anexar o termo na ficha</a>.</div>
+  <label id="aviso-paciente" class="alternar" hidden><span>Avisei o paciente de que a gravação vai começar agora.</span><input type="checkbox" id="avisado"></label>
+</section>
+
+<section class="gravador" {{ 'hidden' if not transcricao_ativa }}>
+  <button type="button" id="botao" class="gravar" aria-live="polite"><span id="botao-txt">Gravar</span></button>
+  <div id="tempo" class="tempo">00:00</div>
+  <p id="estado" class="estado">Toque para começar. O áudio é apagado assim que vira texto.</p>
+  <button type="button" id="parar" class="btn bloco" hidden>Parar e gerar resumo</button>
+  <label class="btn sec bloco" id="enviar-arquivo" style="margin-top:10px">Enviar um áudio já gravado
+    <input type="file" id="arquivo" accept="audio/*,.m4a,.mp3,.ogg,.opus,.wav,.webm" hidden></label>
+  <p class="meta" style="color:var(--apagado);font-size:.88rem;text-align:center;margin-top:8px">Vale também para áudios do WhatsApp salvos em Arquivos. Mantenha a tela ligada e o app aberto durante a gravação.</p>
+</section>
+
+{% if pendentes %}
+<div class="secao"><h2>Aguardando revisão</h2></div>
+{% for t in pendentes %}
+<a class="cartao linha-item" href="{{ url_for('gravacao_ver', tid=t.id) }}">
+  <div class="avatar">{{ t.paciente.inicial }}</div>
+  <div class="meio"><div class="nome">{{ t.paciente.nome }}</div>
+    <div class="meta">{{ t.criado_em|data_br }} {{ t.criado_em|hora }} · {{ 'Sessão gravada' if t.tipo == 'consulta' else 'Relato' }} · {{ t.segundos // 60 }} min</div></div>
+  <span class="tag {{ 'vermelho' if t.status == 'erro' else 'ambar' if t.status == 'gravando' else 'azul' }}">{{ {'pronta':'Revisar','erro':'Com erro','gravando':'Incompleta'}[t.status] }}</span>
+</a>
+{% endfor %}
+{% endif %}
+</main>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var CSRF = {{ csrf_token()|tojson }};
+  var CONSENTIDOS = {{ consentidos|list|tojson }};
+  var URL_NOVA = {{ url_for('gravacao_nova')|tojson }};
+  var URL_FICHA = {{ url_for('paciente_detalhe', pid=0)|tojson }}.replace(/0$/, '');
+  var SEGMENTO_MS = 10 * 60 * 1000;   // cada parte tem até 10 minutos
+
+  var $ = function (id) { return document.getElementById(id); };
+  var alvo = $('alvo'), botao = $('botao'), parar = $('parar'), estado = $('estado'), tempo = $('tempo');
+  var gravacaoId = null, stream = null, rec = null, pedacos = [], inicioParte = 0, inicioTotal = 0;
+  var relogio = null, rotacao = null, fila = [], enviando = false, gravando = false, encerrando = false, wake = null, partesOk = 0;
+
+  function tipo() { return document.querySelector('input[name=tipo]:checked').value; }
+  function pacienteId() { return alvo.selectedOptions[0] ? alvo.selectedOptions[0].dataset.paciente : null; }
+
+  function atualizaConfig() {
+    var consulta = tipo() === 'consulta';
+    var temTermo = CONSENTIDOS.indexOf(parseInt(pacienteId(), 10)) >= 0;
+    $('sem-termo').hidden = !(consulta && !temTermo);
+    $('link-termo').href = URL_FICHA + pacienteId() + '#gravacao';
+    $('aviso-paciente').hidden = !(consulta && temTermo);
+    botao.disabled = consulta && !temTermo;
+  }
+  alvo.addEventListener('change', atualizaConfig);
+  document.querySelectorAll('input[name=tipo]').forEach(function (r) { r.addEventListener('change', atualizaConfig); });
+  atualizaConfig();
+
+  function formato() {
+    var tipos = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
+    for (var i = 0; i < tipos.length; i++) if (window.MediaRecorder && MediaRecorder.isTypeSupported(tipos[i])) return tipos[i];
+    return '';
+  }
+  function extensao(mime) { return mime.indexOf('mp4') >= 0 ? 'mp4' : mime.indexOf('ogg') >= 0 ? 'ogg' : 'webm'; }
+  function mmss(ms) { var s = Math.floor(ms / 1000); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); }
+  function post(url, dados) {
+    var fd = dados || new FormData(); fd.append('_csrf', CSRF);
+    return fetch(url, { method: 'POST', body: fd, credentials: 'same-origin' }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.erro || 'Falha de conexão.'); return j; });
+    });
+  }
+
+  function criarGravacao() {
+    var fd = new FormData(), v = alvo.value;
+    fd.append(v[0] === 'c' ? 'consulta' : 'paciente', v.slice(1));
+    fd.append('tipo', tipo());
+    if ($('avisado').checked) fd.append('avisado', '1');
+    return post(URL_NOVA, fd).then(function (j) { gravacaoId = j.id; });
+  }
+
+  function enfileirar(blob, segundos, nome) { fila.push({ blob: blob, segundos: segundos, nome: nome, tentativas: 0 }); processarFila(); }
+  function processarFila() {
+    if (enviando || !fila.length) return;
+    enviando = true;
+    var item = fila[0], fd = new FormData();
+    fd.append('audio', item.blob, item.nome); fd.append('segundos', item.segundos);
+    estado.textContent = 'Transcrevendo parte ' + (partesOk + 1) + '…';
+    post('/t/gravacao/' + gravacaoId + '/parte', fd).then(function () {
+      fila.shift(); partesOk++; item.blob = null;   // o áudio sai da memória do aparelho
+      estado.textContent = gravando ? 'Gravando. ' + partesOk + (partesOk === 1 ? ' parte transcrita.' : ' partes transcritas.') : 'Parte ' + partesOk + ' transcrita.';
+    }).catch(function (e) {
+      item.tentativas++;
+      if (item.tentativas >= 3) { fila.shift(); estado.textContent = 'Uma parte não foi transcrita: ' + e.message; }
+      else { estado.textContent = e.message + ' Tentando de novo…'; return new Promise(function (ok) { setTimeout(ok, 3000 * item.tentativas); }); }
+    }).then(function () { enviando = false; if (fila.length) processarFila(); else if (encerrando) concluir(); });
+  }
+
+  function novaParte() {
+    var mime = formato();
+    rec = mime ? new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 48000 }) : new MediaRecorder(stream);
+    pedacos = []; inicioParte = Date.now();
+    rec.ondataavailable = function (e) { if (e.data && e.data.size) pedacos.push(e.data); };
+    rec.onstop = function () {
+      var tipoAudio = rec.mimeType || mime || 'audio/mp4';
+      var blob = new Blob(pedacos, { type: tipoAudio }); pedacos = [];
+      if (blob.size) enfileirar(blob, Math.round((Date.now() - inicioParte) / 1000), 'parte.' + extensao(tipoAudio));
+      if (gravando) novaParte(); else { stream.getTracks().forEach(function (t) { t.stop(); }); if (!fila.length && !enviando) concluir(); }
+    };
+    rec.start(1000);
+    clearTimeout(rotacao);
+    rotacao = setTimeout(function () { if (gravando && rec.state === 'recording') rec.stop(); }, SEGMENTO_MS);
+  }
+
+  function iniciar() {
+    botao.disabled = true; estado.textContent = 'Preparando…';
+    criarGravacao().then(function () {
+      return navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    }).then(function (s) {
+      stream = s; gravando = true; inicioTotal = Date.now();
+      document.body.classList.add('gravando');
+      $('config').hidden = true; $('enviar-arquivo').hidden = true; parar.hidden = false;
+      botao.disabled = false; $('botao-txt').textContent = 'Gravando';
+      estado.textContent = 'Gravando. Fale naturalmente.';
+      relogio = setInterval(function () { tempo.textContent = mmss(Date.now() - inicioTotal); }, 500);
+      if (navigator.wakeLock) navigator.wakeLock.request('screen').then(function (w) { wake = w; }).catch(function () {});
+      novaParte();
+    }).catch(function (e) {
+      botao.disabled = false;
+      estado.textContent = e.name === 'NotAllowedError' ? 'Permita o uso do microfone para gravar.' : e.message;
+    });
+  }
+
+  function encerrar() {
+    if (!gravando) return;
+    gravando = false; encerrando = true; clearInterval(relogio); clearTimeout(rotacao);
+    parar.disabled = true; botao.disabled = true; $('botao-txt').textContent = 'Processando';
+    document.body.classList.remove('gravando');
+    estado.textContent = 'Finalizando a transcrição…';
+    if (wake) wake.release().catch(function () {});
+    if (rec && rec.state !== 'inactive') rec.stop();
+  }
+
+  function concluir() {
+    encerrando = false;
+    estado.textContent = 'Gerando resumo com IA…';
+    post('/t/gravacao/' + gravacaoId + '/concluir').then(function (j) { location.href = j.url; })
+      .catch(function (e) { estado.textContent = e.message; location.href = '/t/gravacao/' + gravacaoId; });
+  }
+
+  botao.addEventListener('click', function () { if (gravando) encerrar(); else iniciar(); });
+  parar.addEventListener('click', encerrar);
+  window.addEventListener('beforeunload', function (e) { if (gravando || fila.length) { e.preventDefault(); e.returnValue = ''; } });
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && gravando) {
+      estado.textContent = 'Se o app ficou em segundo plano, o iPhone pode ter pausado o microfone. Confira o tempo.';
+      if (navigator.wakeLock) navigator.wakeLock.request('screen').then(function (w) { wake = w; }).catch(function () {});
+    }
+  });
+
+  $('arquivo').addEventListener('change', function () {
+    var f = this.files[0]; if (!f) return;
+    if (f.size > 25 * 1024 * 1024) { estado.textContent = 'O arquivo passa de 25 MB. Envie um áudio menor.'; return; }
+    botao.disabled = true; $('enviar-arquivo').hidden = true; estado.textContent = 'Enviando áudio…';
+    criarGravacao().then(function () { encerrando = true; enfileirar(f, 0, f.name); })
+      .catch(function (e) { estado.textContent = e.message; botao.disabled = false; $('enviar-arquivo').hidden = false; });
+  });
+})();
+</script>
+{% endblock %}

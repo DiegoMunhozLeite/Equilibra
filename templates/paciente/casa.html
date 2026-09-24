@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div><div class="data">{{ hoje|dia_longo }}</div><h1>{{ saudacao }}, {{ current_user.nome.split()[0] }}</h1></div></header>
+<main class="pagina">
+  {% set d = current_user.dias_limpo %}
+  {% if d is not none %}
+  <section class="limpo">
+    <div class="rotulo">Dias sem uso</div>
+    <div class="dias">{{ d }}</div>
+    <div class="dias-sub">{% if d == 0 %}Hoje é o primeiro dia. Ele conta.{% elif d >= 30 %}{{ d|tempo }}{% else %}{{ 'dia' if d == 1 else 'dias' }}{% endif %}</div>
+    {% if prox %}<div class="prox"><span>Próxima conquista</span><b>{{ prox[1] }} em {{ prox[0] }} {{ 'dia' if prox[0] == 1 else 'dias' }}</b></div>{% endif %}
+    {% if feitas %}<div class="medalhas">{% for m in feitas[-4:] %}<span class="medalha">🏅 {{ m }}</span>{% endfor %}</div>{% endif %}
+  </section>
+  {% endif %}
+
+  {% if ck %}
+  <a class="cartao linha-item" href="{{ url_for('checkin') }}" style="margin-top:16px"><span style="font-size:1.8rem">{{ HUMOR[ck.humor][0] }}</span>
+    <div class="meio"><b>Check-in de hoje feito</b><div class="meta">Fissura {{ ck.fissura }}/10 · toque para ajustar</div></div></a>
+  {% else %}
+  <a class="btn bloco" href="{{ url_for('checkin') }}" style="margin-top:16px;min-height:56px">Fazer o check-in de hoje</a>
+  {% endif %}
+
+  <div class="numeros" style="margin-top:12px">
+    <a class="numero" href="{{ url_for('respirar') }}" style="color:inherit"><div class="ic" style="background:var(--primaria-clara)">🫁</div><div><b style="font-size:1.05rem">Respirar</b><span>3 minutos</span></div></a>
+    <a class="numero" href="{{ url_for('ajuda') }}" style="color:inherit"><div class="ic" style="background:var(--vermelho-claro)">🆘</div><div><b style="font-size:1.05rem">Ajuda</b><span>agora</span></div></a>
+  </div>
+
+  {% if proxima %}
+  <div class="secao"><h2>Próxima sessão</h2></div>
+  <div class="cartao linha-item"><div class="hora-bloco"><b>{{ proxima.inicio|hora }}</b><span>{{ proxima.duracao }} min</span></div>
+    <div class="meio"><b>{{ proxima.inicio.date()|dia_curto }}</b><div class="meta">{{ TIPO_CONSULTA[proxima.tipo] }} com {{ current_user.terapeuta.nome }}</div></div></div>
+  {% endif %}
+
+  {% if tarefa %}
+  <div class="secao"><h2>Para esta semana</h2></div>
+  <div class="cartao">{{ tarefa.tarefa_paciente }}<div class="meta" style="color:var(--apagado);margin-top:6px">Combinado na sessão de {{ tarefa.data|dia_curto }}</div></div>
+  {% endif %}
+
+  <div class="secao"><h2>Aprender</h2><a href="{{ url_for('biblioteca') }}">Ver tudo</a></div>
+  <a class="cartao" href="{{ url_for('biblioteca', c='pratica') }}"><b>Práticas para momentos difíceis</b><div class="meta" style="color:var(--apagado)">Surfar a fissura, aterramento, respiração</div></a>
+
+  <form method="post" action="{{ url_for('sair') }}" style="margin-top:32px;text-align:center">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sec peq">Sair da conta</button></form>
+</main>
+{% endblock %}

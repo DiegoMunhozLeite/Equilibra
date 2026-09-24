@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div><a class="voltar" href="{{ url_for('fim_sessao') }}">‹ Fim de sessão</a>
+  <h1>{{ t.paciente.nome }}</h1>
+  <div class="sub">{{ 'Sessão gravada' if t.tipo == 'consulta' else 'Relato de fim de sessão' }} · {{ t.criado_em|data_br }} · {{ t.segundos // 60 }} min</div></div></header>
+<main class="pagina">
+  {% set d = t.dados %}
+  {% if t.erro %}<div class="msg erro">{{ t.erro }}</div>{% endif %}
+  {% if t.falhas %}<div class="aviso-caixa" style="margin-bottom:12px">{{ t.falhas }} {{ 'tentativa' if t.falhas == 1 else 'tentativas' }} de transcrição falharam. Algum trecho pode estar faltando.</div>{% endif %}
+  {% if t.status == 'gravando' %}<div class="aviso-caixa" style="margin-bottom:12px">Esta gravação foi interrompida antes de terminar. O que foi transcrito está abaixo.</div>{% endif %}
+
+  {% if d %}
+    {% if d.sinais_alerta %}<div class="atencao"><h3>Sinais de alerta mencionados</h3><ul>{% for a in d.sinais_alerta %}<li>{{ a }}</li>{% endfor %}</ul></div>{% endif %}
+    <div class="secao"><h2>Resumo</h2><span class="tag {{ d.risco }}">Risco {{ RISCO[d.risco]|lower }}</span></div>
+    <div class="cartao texto-longo">{{ d.resumo }}</div>
+    {% if d.tarefa_paciente %}<div class="cartao"><b>Tarefa sugerida:</b> {{ d.tarefa_paciente }}</div>{% endif %}
+    <a class="btn bloco" href="{{ destino }}" style="margin-top:16px">Revisar e salvar no prontuário</a>
+  {% elif t.texto %}
+    <div class="vazio">{% if ia_ativa %}O resumo não foi gerado.{% else %}A IA de resumo não está configurada; você pode usar a transcrição para escrever o registro.{% endif %}</div>
+    <div class="acoes" style="justify-content:stretch">
+      {% if ia_ativa %}<form method="post" action="{{ url_for('gravacao_resumir', tid=t.id) }}" style="flex:1"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn bloco">Gerar resumo</button></form>{% endif %}
+      <a class="btn sec" style="flex:1" href="{{ destino }}">Escrever registro</a>
+    </div>
+  {% endif %}
+
+  {% if t.texto %}
+  <details class="cartao" style="margin-top:16px" {{ 'open' if not d }}><summary>Transcrição completa</summary><div class="texto-longo" style="font-size:.95rem">{{ t.texto }}</div></details>
+  {% endif %}
+  <p class="meta" style="color:var(--apagado);font-size:.88rem;margin-top:12px">O áudio foi apagado depois de transcrito. Só este texto fica guardado.</p>
+
+  <form method="post" action="{{ url_for('gravacao_excluir', tid=t.id) }}" data-confirma="Excluir esta transcrição? Isso não pode ser desfeito." style="margin-top:20px">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn perigo">Excluir transcrição</button></form>
+</main>
+{% endblock %}
