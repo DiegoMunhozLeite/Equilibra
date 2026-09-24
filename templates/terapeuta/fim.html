@@ -2,6 +2,9 @@
 {% block conteudo %}
 <header class="topo"><div><h1>Fim de sessão</h1><div class="sub">Fale como foi. A IA transcreve, resume e preenche o registro.</div></div></header>
 <main class="pagina">
+{% if modo_avaliacao %}
+  <div class="aviso-caixa" style="margin-bottom:12px">Modo avaliação: a gravação funciona, mas o áudio é descartado sem ser enviado, e a transcrição e o resumo são exemplos simulados. Nenhum crédito é usado.</div>
+{% endif %}
 {% if not transcricao_ativa %}
   <div class="aviso-caixa">A transcrição ainda não está ativa neste servidor. Configure a chave do serviço de voz (veja o README). Enquanto isso, você pode <a href="{{ url_for('registros') }}">registrar por escrito</a>.</div>
 {% endif %}

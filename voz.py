@@ -24,16 +24,47 @@ class ErroVoz(Exception):
     pass
 
 
+def modo_avaliacao():
+    """Com MODO_AVALIACAO=1 nenhuma API paga é chamada, mesmo com chaves configuradas."""
+    return os.environ.get("MODO_AVALIACAO", "").strip().lower() in ("1", "true", "sim", "yes")
+
+
 def transcricao_ativa():
-    return bool(os.environ.get("OPENAI_API_KEY"))
+    return modo_avaliacao() or bool(os.environ.get("OPENAI_API_KEY"))
 
 
 def ia_ativa():
-    return bool(os.environ.get("ANTHROPIC_API_KEY"))
+    return modo_avaliacao() or bool(os.environ.get("ANTHROPIC_API_KEY"))
+
+
+AVISO_SIMULACAO = "[Simulação do modo avaliação: nenhum áudio foi enviado e nenhuma IA foi usada.]"
+TEXTO_SIMULADO = (
+    "Sessão de cinquenta minutos. O paciente chegou mais tranquilo do que na semana passada e contou que "
+    "conseguiu passar o fim de semana sem usar, apesar de um convite para uma festa. Disse que a fissura "
+    "apareceu no sábado à noite, perto de seis, e que usou a respiração e ligou para o irmão. Ansiedade em "
+    "torno de cinco por causa do trabalho. Dormiu melhor em três noites. Trabalhamos prevenção de recaída e "
+    "fizemos o aterramento cinco quatro três dois um. Combinamos que ele vai anotar os gatilhos no check-in "
+    "e planejar uma saída alternativa para o próximo convite.")
+RESUMO_SIMULADO = {
+    "resumo": "Paciente passou o fim de semana sem uso apesar de convite para festa. Fissura moderada no sábado à "
+              "noite, manejada com respiração e contato com a rede de apoio. Ansiedade moderada ligada ao trabalho "
+              "e melhora parcial do sono. Sessão com prevenção de recaída e aterramento.",
+    "humor": 4, "ansiedade": 5, "motivacao": 7, "fissura": 6, "uso_recente": False, "risco": "moderado",
+    "sinais_alerta": ["Exposição a convites sociais com oferta da substância"],
+    "abordagens": "Prevenção de recaída, aterramento 5-4-3-2-1, respiração",
+    "tarefa_paciente": "Anotar os gatilhos no check-in e planejar uma alternativa para o próximo convite",
+}
+FEEDBACK_SIMULADO = (
+    "Momento: fase de consolidação, com boa resposta às estratégias de enfrentamento e uso ativo da rede de apoio.\n\n"
+    "Atenção: situações sociais seguem como principal gatilho; ansiedade ligada ao trabalho pode aumentar a fissura.\n\n"
+    "Sugestões: ensaiar respostas para convites, reforçar a rotina de sono e revisar o plano de crise na próxima sessão.")
 
 
 def transcrever(dados: bytes, nome_arquivo: str, tipo: str) -> str:
     """Envia o áudio (em memória) e devolve o texto. Não guarda nada."""
+    if modo_avaliacao():
+        del dados
+        return AVISO_SIMULACAO + "\n\n" + TEXTO_SIMULADO
     chave = os.environ.get("OPENAI_API_KEY")
     if not chave:
         raise ErroVoz("A transcrição não está configurada neste servidor.")
@@ -57,6 +88,8 @@ def transcrever(dados: bytes, nome_arquivo: str, tipo: str) -> str:
 
 
 def chamar_claude(prompt: str, max_tokens: int = 1200) -> str:
+    if modo_avaliacao():
+        return AVISO_SIMULACAO + "\n\n" + FEEDBACK_SIMULADO
     chave = os.environ.get("ANTHROPIC_API_KEY")
     if not chave:
         raise ErroVoz("A IA não está configurada neste servidor.")
@@ -107,6 +140,10 @@ Transcrição:
 
 
 def resumir(texto: str, tipo: str) -> dict:
+    if modo_avaliacao():
+        dados = dict(RESUMO_SIMULADO)
+        dados["resumo"] = AVISO_SIMULACAO + " " + dados["resumo"]
+        return dados
     origem = ("uma gravação da própria sessão (terapeuta e paciente conversando)" if tipo == "consulta"
               else "um áudio em que o terapeuta relata como foi a sessão")
     bruto = chamar_claude(PROMPT_RESUMO.format(origem=origem, texto=texto[:120000]), max_tokens=1500)

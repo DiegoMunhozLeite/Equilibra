@@ -53,6 +53,21 @@
   <div class="secao"><h2>Biblioteca</h2><a href="{{ url_for('biblioteca') }}">Abrir</a></div>
   <a class="cartao" href="{{ url_for('biblioteca') }}">Conteúdos sobre substâncias, recuperação e práticas que seus pacientes também veem no app.</a>
 
+  {% if tem_demo %}
+  <div class="cartao" style="margin-top:28px">
+    <b>Dados de demonstração ativos</b>
+    <p class="meta" style="color:var(--apagado);margin:4px 0 12px">Pacientes marcados com “· demo” são fictícios. Apague antes de começar a usar com pacientes reais.</p>
+    <form method="post" action="{{ url_for('demo_apagar') }}" data-confirma="Apagar todos os pacientes fictícios e tudo ligado a eles? Seus dados reais não são afetados.">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn perigo">Apagar dados de demonstração</button></form>
+  </div>
+  {% elif total_pacientes == 0 %}
+  <div class="cartao" style="margin-top:28px;background:var(--primaria-clara);border-color:var(--primaria-media)">
+    <b>Quer ver o app funcionando?</b>
+    <p style="margin:4px 0 12px">Carregue pacientes fictícios com agenda, registros, check-ins, pagamentos, termo de exemplo e uma transcrição para revisar. Dá para apagar tudo depois com um toque.</p>
+    <form method="post" action="{{ url_for('demo_carregar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn bloco">Carregar dados de demonstração</button></form>
+  </div>
+  {% endif %}
+
   <form method="post" action="{{ url_for('sair') }}" style="margin-top:32px;text-align:center">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sec peq">Sair da conta</button>
   </form>

@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#F6F4F1" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#1A1512" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F3F8FC" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1A24" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -16,12 +16,13 @@
 <link rel="icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=1">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=3">
 </head>
 {% import "_icones.html" as ic %}
 {% set sem_barra = self.body_class()|trim == 'sem-barra' %}
 <body class="{% block body_class %}{% endblock %}">
+{% if modo_avaliacao %}<div class="faixa-avaliacao" role="note">Versão de avaliação · IA simulada, sem custo · não cadastre pacientes reais</div>{% endif %}
 {% with msgs = get_flashed_messages(with_categories=true) %}
 {% if msgs %}<div class="mensagens" role="status">{% for cat, m in msgs %}<div class="msg {{ cat }}">{{ m }}</div>{% endfor %}</div>{% endif %}
 {% endwith %}

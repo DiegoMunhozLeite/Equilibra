@@ -14,6 +14,8 @@ services:
         fromDatabase:
           name: equilibra-db
           property: connectionString
+      - key: MODO_AVALIACAO
+        value: "1"
       - key: CODIGO_CADASTRO
         sync: false
       - key: OPENAI_API_KEY

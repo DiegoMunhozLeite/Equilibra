@@ -9,6 +9,7 @@ Configuração por variáveis de ambiente (nunca coloque chaves no código):
   ANTHROPIC_API_KEY   opcional; ativa resumos e feedback clínico com IA
   ANTHROPIC_MODEL     opcional; modelo usado pela IA
   OPENAI_API_KEY      opcional; ativa a transcrição de áudio (ver voz.py)
+  MODO_AVALIACAO      1 = simula transcrição e IA, sem chamar nenhuma API paga
 """
 import json
 import os
@@ -305,6 +306,14 @@ def consentimento_ativo(p):
             .order_by(Consentimento.assinado_em.desc()).first())
 
 
+class DemoItem(db.Model):
+    """Anota o que foi criado pelos dados de demonstração, para apagar depois."""
+    id = db.Column(db.Integer, primary_key=True)
+    terapeuta_id = db.Column(db.Integer, db.ForeignKey("terapeuta.id"), nullable=False, index=True)
+    tipo = db.Column(db.String(20), nullable=False)
+    ref_id = db.Column(db.Integer, nullable=False)
+
+
 class Artigo(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     autor_id = db.Column(db.Integer, db.ForeignKey("terapeuta.id"))  # None = conteúdo base
@@ -457,7 +466,8 @@ def contexto():
     return dict(csrf_token=csrf_token, HUMOR=HUMOR, RISCO=RISCO, STATUS_PACIENTE=STATUS_PACIENTE,
                 STATUS_CONSULTA=STATUS_CONSULTA, TIPO_CONSULTA=TIPO_CONSULTA, CATEGORIAS=CATEGORIAS,
                 RESULTADO_TESTE=RESULTADO_TESTE, SUBSTANCIAS=SUBSTANCIAS, GATILHOS=GATILHOS,
-                hoje=hoje(), saudacao=saudacao, ia_ativa=voz.ia_ativa(), transcricao_ativa=voz.transcricao_ativa())
+                hoje=hoje(), saudacao=saudacao, ia_ativa=voz.ia_ativa(), transcricao_ativa=voz.transcricao_ativa(),
+                modo_avaliacao=voz.modo_avaliacao())
 
 
 # ============================================================ regras clínicas
@@ -645,8 +655,33 @@ def painel():
     recentes = (Registro.query.filter_by(terapeuta_id=current_user.id)
                 .order_by(Registro.data.desc(), Registro.id.desc()).limit(5).all())
     n_recentes = Registro.query.filter_by(terapeuta_id=current_user.id).filter(Registro.data >= hoje() - timedelta(days=7)).count()
+    tem_demo = DemoItem.query.filter_by(terapeuta_id=current_user.id).first() is not None
+    total = Paciente.query.filter_by(terapeuta_id=current_user.id).count()
     return render_template("terapeuta/painel.html", consultas=consultas, atencao=atencao,
-                           ativos=len(ativos), recentes=recentes, n_recentes=n_recentes)
+                           ativos=len(ativos), recentes=recentes, n_recentes=n_recentes,
+                           tem_demo=tem_demo, total_pacientes=total)
+
+
+@app.route("/t/demo/carregar", methods=["POST"])
+@exige("terapeuta")
+def demo_carregar():
+    import demo, sys
+    if DemoItem.query.filter_by(terapeuta_id=current_user.id).first():
+        flash("Os dados de demonstração já estão carregados.", "aviso")
+    else:
+        n = demo.carregar(sys.modules[__name__], current_user)
+        flash(f"Pronto: {n} pacientes fictícios com sessões, registros, check-ins e pagamentos. "
+              "Apague quando quiser no fim desta página.", "ok")
+    return redirect(url_for("painel"))
+
+
+@app.route("/t/demo/apagar", methods=["POST"])
+@exige("terapeuta")
+def demo_apagar():
+    import demo, sys
+    n = demo.apagar(sys.modules[__name__], current_user)
+    flash(f"Dados de demonstração apagados ({n} pacientes fictícios). Seus dados reais não foram alterados.", "ok")
+    return redirect(url_for("painel"))
 
 
 @app.route("/t/estoque", methods=["POST"])
