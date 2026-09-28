@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#F3F8FC" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0F1A24" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light only">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -17,16 +17,19 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=3">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=4">
 </head>
 {% import "_icones.html" as ic %}
 {% set sem_barra = self.body_class()|trim == 'sem-barra' %}
 <body class="{% block body_class %}{% endblock %}">
+{% if vendo_como and current_user.is_authenticated and current_user.papel == 'paciente' %}<div class="faixa-demo" role="note"><span>👀 Você está vendo o app como <b>{{ current_user.nome }}</b></span>
+  <form method="post" action="{{ url_for('demo_voltar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn peq">Voltar ao terapeuta</button></form></div>{% endif %}
 {% if modo_avaliacao %}<div class="faixa-avaliacao" role="note">Versão de avaliação · IA simulada, sem custo · não cadastre pacientes reais</div>{% endif %}
 {% with msgs = get_flashed_messages(with_categories=true) %}
 {% if msgs %}<div class="mensagens" role="status">{% for cat, m in msgs %}<div class="msg {{ cat }}">{{ m }}</div>{% endfor %}</div>{% endif %}
 {% endwith %}
 {% block conteudo %}{% endblock %}
+<p class="versao">Equilibra {{ VERSAO }}</p>
 {% if current_user.is_authenticated and not sem_barra %}
 {% set ep = request.endpoint %}
 <div class="barra"><nav aria-label="Navegação principal">
@@ -56,6 +59,19 @@ document.querySelectorAll('[data-mostra]').forEach(function (t) {
   var alvo = document.getElementById(t.dataset.mostra);
   function upd() { alvo.hidden = !t.checked; }
   t.addEventListener('change', upd); upd();
+});
+document.querySelectorAll('[data-indicador]').forEach(function (box) {
+  var faixa = box.querySelector('input[type=range]'), oculto = box.querySelector('input[type=hidden]');
+  var valor = box.querySelector('[data-valor]'), limpar = box.querySelector('[data-limpar]');
+  function marcar() { oculto.value = faixa.value; box.classList.add('avaliado'); valor.textContent = faixa.value + '/10'; valor.classList.remove('vazio'); limpar.hidden = false; }
+  faixa.addEventListener('input', marcar);
+  faixa.addEventListener('change', marcar);
+  limpar.addEventListener('click', function () { oculto.value = ''; box.classList.remove('avaliado'); valor.textContent = 'não avaliado'; valor.classList.add('vazio'); limpar.hidden = true; });
+});
+document.querySelectorAll('.cronometro[data-desde]').forEach(function (el) {
+  var desde = new Date(el.dataset.desde);
+  function upd() { var m = Math.max(0, Math.floor((Date.now() - desde.getTime()) / 60000)); el.textContent = m < 60 ? m + ' min' : Math.floor(m / 60) + 'h' + String(m % 60).padStart(2, '0'); }
+  upd(); setInterval(upd, 30000);
 });
 document.querySelectorAll('[data-confirma]').forEach(function (f) {
   f.addEventListener('submit', function (e) { if (!confirm(f.dataset.confirma)) e.preventDefault(); });

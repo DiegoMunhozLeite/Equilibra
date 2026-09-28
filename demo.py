@@ -17,27 +17,27 @@ PDF_EXEMPLO = (b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
                b"trailer<</Root 1 0 R>>\n%%EOF")
 
 PACIENTES = [
-    dict(nome="Ana · demo", substancias="Álcool", tempo_uso="8 anos", status="ativo", dias_limpo=146,
+    dict(nome="Ana · demo", tipo_teste="Multi 6", substancias="Álcool", tempo_uso="8 anos", status="ativo", dias_limpo=146,
          sessoes_semana=1, valor_sessao=180.0, horario_pref="Terças às 14h", pacote=(12, 2160.0),
          anamnese="Paciente fictícia. Buscou tratamento após pressão no trabalho. Boa rede de apoio familiar, "
                   "motivada. Pratica caminhada e começou meditação guiada.", consentimento=True, perfil="estavel"),
-    dict(nome="Bruno · demo", substancias="Cocaína|Álcool", tempo_uso="5 anos", status="ativo", dias_limpo=3,
+    dict(nome="Bruno · demo", tipo_teste="Multi 12", substancias="Cocaína|Álcool", tempo_uso="5 anos", status="ativo", dias_limpo=3,
          sessoes_semana=2, valor_sessao=200.0, horario_pref="Segundas e quintas, 18h", pacote=(4, 800.0),
          anamnese="Paciente fictício. Lapso recente em evento social. Relata ambivalência e dificuldade com fins de "
                   "semana. Irmão acompanha o tratamento.", consentimento=True, perfil="risco"),
-    dict(nome="Carla · demo", substancias="Benzodiazepínicos", tempo_uso="3 anos", status="ativo", dias_limpo=41,
+    dict(nome="Carla · demo", tipo_teste="Multi 3", substancias="Benzodiazepínicos", tempo_uso="3 anos", status="ativo", dias_limpo=41,
          sessoes_semana=1, valor_sessao=160.0, horario_pref="Quartas às 10h", pacote=(4, 640.0),
          anamnese="Paciente fictícia. Em redução gradual acompanhada por psiquiatra. Insônia é o principal desafio. "
                   "Responde bem a práticas de respiração e escaneamento corporal.", consentimento=False, perfil="melhora"),
-    dict(nome="Diego · demo", substancias="Maconha|Tabaco/nicotina", tempo_uso="10 anos", status="ativo",
+    dict(nome="Diego · demo", tipo_teste="Multi 6", substancias="Maconha|Tabaco/nicotina", tempo_uso="10 anos", status="ativo",
          dias_limpo=19, sessoes_semana=1, valor_sessao=150.0, horario_pref="Sextas às 16h", pacote=(2, 300.0),
          anamnese="Paciente fictício. Uso diário para dormir. Trabalha de casa, rotina desorganizada. "
                   "Objetivo inicial de reduzir, depois parar.", consentimento=False, perfil="oscila"),
-    dict(nome="Elisa · demo", substancias="Crack", tempo_uso="2 anos", status="pausado", dias_limpo=None,
+    dict(nome="Elisa · demo", tipo_teste="Multi 9", substancias="Crack", tempo_uso="2 anos", status="pausado", dias_limpo=None,
          sessoes_semana=1, valor_sessao=120.0, horario_pref="A combinar", pacote=None,
          anamnese="Paciente fictícia. Tratamento pausado a pedido dela por mudança de cidade. "
                   "Encaminhada ao CAPS AD da nova região.", consentimento=False, perfil="pausado"),
-    dict(nome="Fábio · demo", substancias="Álcool|Jogo", tempo_uso="12 anos", status="alta", dias_limpo=430,
+    dict(nome="Fábio · demo", tipo_teste="Multi 1", substancias="Álcool|Jogo", tempo_uso="12 anos", status="alta", dias_limpo=430,
          sessoes_semana=0, valor_sessao=180.0, horario_pref="", pacote=(20, 3600.0),
          anamnese="Paciente fictício. Recebeu alta após 14 meses. Segue frequentando grupo de ajuda mútua "
                   "e faz contato mensal.", consentimento=False, perfil="alta"),
@@ -66,6 +66,12 @@ COMENTARIOS = {
     "pausado": ["Última sessão antes da pausa. Organizamos o encaminhamento e o contato com o novo serviço."],
     "alta": ["Sessão de alta. Revisamos a trajetória, os sinais de alerta e o plano de manutenção."],
 }
+# Outros indicadores por perfil: tristeza, irritabilidade, sono, energia, abstinencia, isolamento, autoestima
+PERFIL_EXTRA = {
+    "estavel": (2, 2, 7, 7, 0, 2, 7), "risco": (6, 7, 3, 4, 4, 6, 3), "melhora": (4, 3, 4, 5, 3, 3, 5),
+    "oscila": (4, 5, 4, 4, 2, 5, 5), "pausado": (5, 5, 4, 4, 2, 6, 4), "alta": (1, 1, 8, 8, 0, 1, 8),
+}
+CAMPOS_EXTRA = ["tristeza", "irritabilidade", "sono", "energia", "abstinencia", "isolamento", "autoestima"]
 PERFIL_NUM = {  # (humor, ansiedade, motivacao, fissura) aproximados
     "estavel": (4, 3, 8, 1), "risco": (2, 7, 4, 8), "melhora": (3, 5, 6, 3),
     "oscila": (3, 5, 5, 5), "pausado": (3, 5, 4, 5), "alta": (5, 2, 9, 0),
@@ -105,7 +111,7 @@ def carregar(m, terapeuta):
 
     pacientes = []
     for i, d in enumerate(PACIENTES):
-        p = m.Paciente(terapeuta_id=terapeuta.id, nome=d["nome"], substancias=d["substancias"],
+        p = m.Paciente(terapeuta_id=terapeuta.id, nome=d["nome"], substancias=d["substancias"], tipo_teste=d["tipo_teste"],
                        tempo_uso=d["tempo_uso"], status=d["status"], sessoes_semana=d["sessoes_semana"],
                        valor_sessao=d["valor_sessao"], horario_pref=d["horario_pref"] or None,
                        anamnese=d["anamnese"], telefone=f"(11) 90000-00{i + 1:02d}",
@@ -130,6 +136,9 @@ def carregar(m, terapeuta):
             c = m.Consulta(terapeuta_id=terapeuta.id, paciente_id=p.id, inicio=inicio, duracao=50,
                            tipo="online" if perfil == "oscila" and s % 2 else "individual",
                            status="faltou" if faltou else "realizada")
+            if not faltou:
+                c.checkin_em = inicio + timedelta(minutes=rnd.randint(-3, 12))
+                c.checkout_em = c.checkin_em + timedelta(minutes=rnd.randint(44, 68))
             db.session.add(c)
             db.session.flush()
             tendencia = (len(semanas) - n) if perfil == "melhora" else 0
@@ -142,7 +151,7 @@ def carregar(m, terapeuta):
                            fissura=None if faltou else perto(f + tendencia // 2, 0, 10),
                            uso_recente=(perfil == "risco" and s == 1),
                            data_uso=(hoje - timedelta(days=3)) if (perfil == "risco" and s == 1) else None,
-                           teste_feito=teste,
+                           teste_feito=teste, teste_tipo=d["tipo_teste"] if teste else None,
                            teste_resultado=("positivo" if perfil == "risco" and s == 1 else "negativo") if teste else None,
                            risco="baixo" if faltou else (RISCO_PERFIL[perfil] if s <= 2 else
                                                          "moderado" if perfil == "risco" else "baixo"),
@@ -150,6 +159,10 @@ def carregar(m, terapeuta):
                            comentarios="Paciente não compareceu e não avisou. Enviei mensagem para remarcar."
                            if faltou else COMENTARIOS[perfil][n % len(COMENTARIOS[perfil])],
                            tarefa_paciente=None if faltou else rnd.choice(TAREFAS))
+            if not faltou:
+                for campo, base_v in zip(CAMPOS_EXTRA, PERFIL_EXTRA[perfil]):
+                    if rnd.random() < 0.85:  # nem todo indicador é avaliado em toda sessão
+                        setattr(r, campo, perto(base_v - (tendencia // 2 if campo in ("sono", "energia") else -(tendencia // 3)), 0, 10))
             if perfil == "risco" and s == 1:
                 r.feedback_ia = ("[Exemplo de feedback gerado por IA]\n\nMomento: lapso recente com culpa intensa e fissura "
                                  "alta à noite, o que indica período de vulnerabilidade.\n\nAtenção: risco de recaída nas próximas "
@@ -217,9 +230,8 @@ def carregar(m, terapeuta):
 
     # uma transcrição aguardando revisão
     carla = next(p for p, d in pacientes if d["perfil"] == "melhora")
-    t = m.Transcricao(terapeuta_id=terapeuta.id, paciente_id=carla.id, tipo="resumo", status="pronta",
-                      texto=TRANSCRICAO_EXEMPLO, partes=1, segundos=94,
-                      sugestao=json.dumps(SUGESTAO_EXEMPLO, ensure_ascii=False),
+    t = m.Transcricao(terapeuta_id=terapeuta.id, paciente_id=carla.id, tipo="resumo", status="transcrita",
+                      texto=TRANSCRICAO_EXEMPLO, texto_original=TRANSCRICAO_EXEMPLO, partes=1, segundos=94,
                       criado_em=agora - timedelta(minutes=40))
     db.session.add(t)
 
@@ -233,7 +245,9 @@ def carregar(m, terapeuta):
     db.session.add(a)
     anota("artigo", a)
 
-    terapeuta.estoque_testes, terapeuta.estoque_minimo = 8, 10
+    quantidades = {"Multi 1": 12, "Multi 2": 6, "Multi 3": 9, "Multi 6": 3, "Multi 9": 7, "Multi 12": 2}
+    for e in m.estoques(terapeuta):
+        e.quantidade, e.minimo = quantidades.get(e.tipo, 5), 5
     db.session.add_all(criados)
     db.session.commit()
     return len(pacientes)

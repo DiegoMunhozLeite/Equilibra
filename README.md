@@ -6,11 +6,12 @@ Feito em Python (Flask) como PWA: instala no iPhone pelo Safari, sem App Store.
 ## O que tem
 
 **Terapeuta**
-- Início: sessões do dia, pacientes em atenção, estoque de testes toxicológicos com alerta de reposição
-- Agenda semanal, com status e notas pré-sessão
+- Início: sessões do dia, atendimento em andamento, tempo atendido no mês, pacientes em atenção e estoque de testes por tipo (Multi 1 a Multi 12) com alerta de reposição
+- Agenda semanal, com status, notas pré-sessão e check-in/check-out do atendimento
+- Relatório mensal do tempo de atendimento: total, média, minutos por dia, por paciente e comparação com o mês anterior
 - Fim de sessão: grave seu relato ou a sessão inteira; a IA transcreve, resume e preenche o registro para você revisar
 - Pacientes: ficha, tempo sem uso com conquistas, pagamentos por pacote, termo de consentimento de gravação, link de convite
-- Registros pós-sessão: humor, ansiedade, motivação, fissura, uso recente, teste, risco, abordagens, tarefa para o paciente
+- Registros pós-sessão: humor, 10 indicadores (ansiedade, motivação, fissura, tristeza, irritabilidade, sono, energia, abstinência física, isolamento e autoestima), uso recente, teste por tipo, risco, abordagens e tarefa para o paciente
 - Mood: distribuição e tendência do humor por período e paciente
 - Biblioteca: conteúdos prontos sobre substâncias, recuperação e práticas, e os seus próprios
 
@@ -24,7 +25,10 @@ Feito em Python (Flask) como PWA: instala no iPhone pelo Safari, sem App Store.
 - **O áudio nunca é guardado.** Ele é gravado em partes de até 10 minutos, cada parte é enviada para transcrição e descartada logo depois. Só o texto fica no banco.
 - **Gravar a sessão inteira exige termo ativo.** Anexe o termo assinado na ficha do paciente. Sem ele, ou depois de uma revogação, o botão fica bloqueado. A cada gravação você confirma que avisou o paciente.
 - **O nome do paciente é trocado por [paciente]** antes de o texto ir para a IA de resumo. O serviço de transcrição recebe o áudio como foi gravado, então evite dizer nome completo na gravação.
+- **Você confere a transcrição antes do resumo.** Depois de gravar, o app mostra o texto para você corrigir. A IA só resume o texto revisado, e a versão original fica guardada.
+- **A IA precisa provar cada valor.** Cada indicador sugerido vem com o trecho exato da transcrição que o justifica. O app confere se o trecho existe; se não existir, o valor é descartado e fica como "não avaliado".
 - **Nada entra no prontuário sem revisão.** A IA só sugere; você confere e salva.
+- Nenhuma transcrição automática é 100% fiel. O modelo padrão é o `gpt-4o-transcribe`, com um vocabulário de apoio do contexto clínico e holístico; se ele não estiver disponível, o app usa o `whisper-1`. Ambos podem ser trocados por `TRANSCRICAO_MODELO` e `TRANSCRICAO_RESERVA`.
 - Páginas com dados de pacientes não ficam em cache no aparelho.
 
 ### Sugestão de itens para o seu termo de consentimento
@@ -41,6 +45,12 @@ Revise com um advogado. Itens que costumam ser pedidos pela LGPD para dados de s
 - Mantenha o app aberto e a tela ligada durante a gravação. Se o iPhone bloquear a tela ou você trocar de app, o microfone pode pausar. O app pede para a tela não apagar quando o sistema permite.
 - Uma parte que falhar três vezes na transcrição é perdida (o áudio não é guardado para nova tentativa). O app avisa quando isso acontece.
 - Áudios do WhatsApp podem ser enviados pela opção "Enviar um áudio já gravado", depois de salvos em Arquivos.
+
+## Demonstração para terapeutas
+
+- **Modo avaliação** (`MODO_AVALIACAO=1`, já ligado no `render.yaml`): nenhuma API paga é chamada; transcrição, resumo e feedback são exemplos simulados e identificados.
+- **Dados de demonstração:** no fim do painel, "Carregar dados de demonstração" cria pacientes fictícios marcados com "· demo". "Apagar dados de demonstração" remove tudo.
+- **Ver como paciente:** na ficha de um paciente demo, abre o app como o paciente vê. A faixa no topo tem o botão para voltar ao terapeuta.
 
 ## Rodar no computador
 
@@ -71,6 +81,19 @@ Outros provedores compatíveis de transcrição podem ser usados com `TRANSCRICA
 1. Abra o endereço do app no **Safari**.
 2. Toque em **Compartilhar** e depois em **Adicionar à Tela de Início**.
 3. O Equilibra abre em tela cheia, com ícone próprio. Faça o mesmo no iPhone do paciente, depois que ele criar o acesso pelo link de convite.
+
+## Versões
+
+A versão em uso aparece no rodapé de todas as telas. Ela é definida em `VERSAO`, no começo de `app.py`.
+
+| Versão | O que trouxe |
+|---|---|
+| v1 | Primeira versão: terapeuta e paciente, agenda, prontuário, check-in diário, biblioteca, gravação com consentimento e transcrição com IA |
+| v2 | Visual azul clarinho e branco, novo ícone |
+| v3 | Dados de demonstração (carregar e apagar) |
+| v4 | Modo avaliação: IA simulada, sem custo |
+| v5 | Visual branco, testes Multi 1 a 12 com estoque por tipo, 10 indicadores, revisão da transcrição com prova da IA, check-in e check-out, relatório mensal, ver como paciente |
+| v6 | Número da versão no rodapé do app |
 
 ## Arquivos
 

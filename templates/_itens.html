@@ -22,14 +22,27 @@
       <a class="nome" style="color:inherit;display:block" href="{{ url_for('paciente_detalhe', pid=c.paciente_id) }}">{{ c.paciente.nome }}</a>
       <div class="meta">{{ TIPO_CONSULTA[c.tipo] }}</div>
       <div class="etiquetas"><span class="tag {{ c.status }}">{{ STATUS_CONSULTA[c.status] }}</span>
+        {% if c.minutos_atendidos %}<span class="tag azul">⏱ {{ c.minutos_atendidos|horas }} atendidos</span>{% endif %}
         {% if c.registro %}<span class="tag verde">Registro feito</span>{% endif %}</div>
     </div>
   </div>
   {% if c.notas_pre %}<p class="meta" style="margin:10px 0 0;color:var(--apagado)">{{ c.notas_pre }}</p>{% endif %}
+  {% if c.em_atendimento %}
+  <div class="atendendo" style="margin-top:12px"><span class="ponto" aria-hidden="true"></span>
+    <div class="meio">Em atendimento desde {{ c.checkin_em|hora }} · <span class="cronometro" data-desde="{{ c.checkin_em.isoformat() }}">0 min</span></div></div>
+  {% elif c.checkin_em and c.checkout_em %}
+  <p class="meta" style="margin:10px 0 0;color:var(--apagado)">Check-in {{ c.checkin_em|hora }} · Check-out {{ c.checkout_em|hora }}</p>
+  {% endif %}
   <div class="acoes" style="margin-top:12px">
-    <a class="btn sec peq" href="{{ url_for('consulta_form', cid=c.id) }}">Editar</a>
+    <a class="btn sec peq esq" href="{{ url_for('consulta_form', cid=c.id) }}">Editar</a>
     {% if c.status != 'cancelada' %}
-    <a class="btn peq" href="{{ url_for('registro_detalhe', rid=c.registro.id) if c.registro else url_for('registro_form', cid=c.id) }}">{{ 'Ver registro' if c.registro else 'Registrar sessão' }}</a>
+      {% if not c.checkin_em and c.status == 'agendada' %}
+      <form method="post" action="{{ url_for('consulta_checkin', cid=c.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">{% if voltar %}<input type="hidden" name="voltar" value="{{ voltar }}">{% endif %}<button class="btn peq">▶ Check-in</button></form>
+      {% elif c.em_atendimento %}
+      <form method="post" action="{{ url_for('consulta_checkout', cid=c.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">{% if voltar %}<input type="hidden" name="voltar" value="{{ voltar }}">{% endif %}<button class="btn peq">■ Check-out</button></form>
+      {% else %}
+      <a class="btn peq" href="{{ url_for('registro_detalhe', rid=c.registro.id) if c.registro else url_for('registro_form', cid=c.id) }}">{{ 'Ver registro' if c.registro else 'Registrar sessão' }}</a>
+      {% endif %}
     {% endif %}
   </div>
 </div>

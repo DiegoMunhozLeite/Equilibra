@@ -17,7 +17,7 @@
     {% for n in [5,4,3,2,1] %}<div><em>{{ HUMOR[n][0] }}</em><b>{{ contagem[n] }}</b><small>{{ HUMOR[n][1] }}<br>{{ (contagem[n] * 100 / total)|round|int }}%</small></div>{% endfor %}
   </div>
   <div class="barras" aria-hidden="true">
-    {% for n, cor in [(5,'var(--verde)'),(4,'#6FBF8E'),(3,'var(--ambar)'),(2,'#E08A5A'),(1,'var(--vermelho)')] %}<span style="width:{{ contagem[n] * 100 / total }}%;background:{{ cor }}"></span>{% endfor %}
+    {% for n, cor in [(5,'var(--verde)'),(4,'#7CC3A4'),(3,'var(--ambar)'),(2,'#E4A07A'),(1,'var(--vermelho)')] %}<span style="width:{{ contagem[n] * 100 / total }}%;background:{{ cor }}"></span>{% endfor %}
   </div>
   <div class="secao"><h2>Tendência</h2><span style="color:var(--apagado)">Média {{ media }} de 5</span></div>
   <div class="cartao">{{ grafico(linha, 'Humor', periodo) }}<p class="meta" style="margin:8px 0 0;color:var(--apagado)">Média diária do humor, somando registros de sessão e check-ins dos pacientes.</p></div>

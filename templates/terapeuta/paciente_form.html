@@ -25,6 +25,13 @@
     {% set outras = atuais|reject('in', SUBSTANCIAS)|list %}
     <input name="substancia_outra" type="text" placeholder="Outra (descreva)" style="margin-top:10px" value="{{ outras|join(', ') }}">
   </div>
+  <div class="campo"><label for="tipo_teste">Tipo de teste toxicológico *</label>
+    <select id="tipo_teste" name="tipo_teste" required>
+      <option value="">Escolha</option>
+      {% for t in TIPOS_TESTE %}<option value="{{ t }}" {{ 'selected' if p.tipo_teste == t }}>{{ t }}</option>{% endfor %}
+      <option value="nenhum" {{ 'selected' if p.tipo_teste == 'nenhum' }}>Não faz teste</option>
+    </select>
+    <div class="ajuda">Vem selecionado no registro pós-sessão e desconta do estoque desse tipo.</div></div>
   <div class="duas">
     <div class="campo"><label for="tempo_uso">Tempo de uso</label><input id="tempo_uso" name="tempo_uso" type="text" placeholder="Ex.: 5 anos" value="{{ p.tempo_uso or '' }}"></div>
     <div class="campo"><label for="status">Status</label><select id="status" name="status">

@@ -1,6 +1,6 @@
 {% extends "base.html" %}{% from "_itens.html" import consulta_item  with context %}
 {% block conteudo %}
-<header class="topo"><div><h1>Agenda</h1><div class="sub">Suas sessões</div></div>
+<header class="topo"><div><h1>Agenda</h1><div class="sub">Suas sessões · <a href="{{ url_for('relatorio') }}">Relatório do mês</a></div></div>
   <a class="btn" href="{{ url_for('consulta_form', dia=dia.isoformat()) }}">+ Sessão</a></header>
 <main class="pagina">
   <div class="semana-nav">
@@ -16,7 +16,7 @@
   </nav>
   {% if dia != hoje %}<p style="text-align:center;margin-top:10px"><a href="{{ url_for('agenda') }}">Ir para hoje</a></p>{% endif %}
   <div class="secao"><h2>{{ (dia|dia_longo)[0]|upper }}{{ (dia|dia_longo)[1:] }}</h2></div>
-  {% for c in do_dia %}{{ consulta_item(c) }}{% else %}
+  {% for c in do_dia %}{{ consulta_item(c, url_for('agenda', dia=dia.isoformat())) }}{% else %}
   <div class="vazio">Nenhuma sessão neste dia.<br><a class="btn sec peq" href="{{ url_for('consulta_form', dia=dia.isoformat()) }}">Agendar sessão</a></div>
   {% endfor %}
 </main>

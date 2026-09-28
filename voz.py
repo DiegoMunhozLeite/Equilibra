@@ -12,11 +12,22 @@ e é descartado em seguida, com sucesso ou erro.
 import json
 import os
 import re
+import unicodedata
 
 import requests
 
 TRANSCRICAO_URL = os.environ.get("TRANSCRICAO_URL", "https://api.openai.com/v1/audio/transcriptions")
-TRANSCRICAO_MODELO = os.environ.get("TRANSCRICAO_MODELO", "whisper-1")
+# Modelo mais preciso por padrão; se o provedor recusar, tenta de novo com o modelo reserva.
+TRANSCRICAO_MODELO = os.environ.get("TRANSCRICAO_MODELO", "gpt-4o-transcribe")
+TRANSCRICAO_RESERVA = os.environ.get("TRANSCRICAO_RESERVA", "whisper-1")
+# Vocabulário de apoio: ajuda o reconhecimento de termos do contexto clínico e holístico.
+VOCABULARIO = (
+    "Sessão de terapia holística em dependência química, em português do Brasil. Termos frequentes: "
+    "fissura, abstinência, lapso, recaída, redução de danos, CAPS AD, Narcóticos Anônimos, NA, AA, "
+    "Alcoólicos Anônimos, teste toxicológico, Multi 6, Multi 12, benzodiazepínico, clonazepam, "
+    "cocaína, crack, maconha, álcool, cachaça, opioide, reiki, florais, aromaterapia, constelação, "
+    "meditação, respiração consciente, aterramento, escaneamento corporal, entrevista motivacional, "
+    "prevenção de recaída, gatilho, pino, pedra, beck, noia, rebite.")
 LIMITE_AUDIO = 25 * 1024 * 1024  # limite de arquivo da maioria das APIs de transcrição
 
 
@@ -70,14 +81,19 @@ def transcrever(dados: bytes, nome_arquivo: str, tipo: str) -> str:
         raise ErroVoz("A transcrição não está configurada neste servidor.")
     if len(dados) > LIMITE_AUDIO:
         raise ErroVoz("Arquivo de áudio acima de 25 MB. Grave em partes menores.")
-    try:
-        resp = requests.post(
+    def enviar(modelo):
+        return requests.post(
             TRANSCRICAO_URL,
             headers={"Authorization": f"Bearer {chave}"},
             files={"file": (nome_arquivo, dados, tipo or "application/octet-stream")},
-            data={"model": TRANSCRICAO_MODELO, "language": "pt", "response_format": "json"},
+            data={"model": modelo, "language": "pt", "response_format": "json",
+                  "prompt": VOCABULARIO, "temperature": "0"},
             timeout=170,
         )
+    try:
+        resp = enviar(TRANSCRICAO_MODELO)
+        if resp.status_code in (400, 404) and TRANSCRICAO_RESERVA and TRANSCRICAO_RESERVA != TRANSCRICAO_MODELO:
+            resp = enviar(TRANSCRICAO_RESERVA)
     except requests.RequestException:
         raise ErroVoz("Sem conexão com o serviço de transcrição.")
     finally:
@@ -118,62 +134,127 @@ def anonimizar(texto: str, nomes) -> str:
 
 
 PROMPT_RESUMO = """Você apoia um terapeuta holístico que acompanha pessoas em recuperação de dependência química.
-Abaixo está a transcrição automática de {origem}. A transcrição pode ter erros de reconhecimento de fala.
+Abaixo está a transcrição de {origem}, já revisada pelo terapeuta.
+
+REGRA PRINCIPAL: use somente o que está escrito na transcrição. Não deduza, não complete e não interprete além
+do que foi dito. Cada valor que você preencher precisa vir com um "trecho": uma cópia EXATA, palavra por palavra,
+de uma parte curta da transcrição que justifica o valor. Se não houver trecho que justifique, use valor null.
 
 Responda SOMENTE com um objeto JSON válido, sem texto antes ou depois e sem crases, com estas chaves:
-- "resumo": texto em português do Brasil, até 200 palavras, com os temas da sessão, estado do paciente e combinados
-- "humor": inteiro de 1 (muito mal) a 5 (muito bem), ou null se não der para inferir
-- "ansiedade": inteiro de 0 a 10, ou null
-- "motivacao": inteiro de 0 a 10, ou null
-- "fissura": inteiro de 0 a 10, ou null
-- "uso_recente": true, false ou null
+- "resumo": até 200 palavras, em português do Brasil, só com fatos presentes na transcrição
+- "humor": {{"valor": inteiro de 1 (muito mal) a 5 (muito bem) ou null, "trecho": "..."}}
+- "uso_recente": {{"valor": true, false ou null, "trecho": "..."}}
+- "indicadores": objeto com as chaves {chaves}; cada uma no formato {{"valor": inteiro de 0 a 10 ou null, "trecho": "..."}}
+  Significado: {significados}
 - "risco": "baixo", "moderado", "alto" ou "critico"
-- "sinais_alerta": lista de frases curtas sobre riscos mencionados (ideação suicida, autolesão, abstinência grave, overdose, violência, abandono do tratamento); lista vazia se não houver
-- "abordagens": texto curto com práticas ou técnicas usadas na sessão, ou ""
-- "tarefa_paciente": uma tarefa ou combinado para o paciente até a próxima sessão, ou ""
+- "sinais_alerta": lista de {{"texto": frase curta, "trecho": "..."}} sobre ideação suicida, autolesão, abstinência grave,
+  overdose, violência ou abandono do tratamento; lista vazia se não houver
+- "abordagens": práticas ou técnicas citadas na transcrição, ou ""
+- "tarefa_paciente": combinado para o paciente citado na transcrição, ou ""
 
-Regras: não faça diagnóstico, não sugira medicamentos nem doses, não invente informações que não estão na
-transcrição. Se houver qualquer menção a ideação suicida ou risco à vida, use risco "critico" e registre em sinais_alerta.
+Outras regras: não faça diagnóstico, não sugira medicamentos nem doses. Qualquer menção a ideação suicida ou risco
+à vida exige risco "critico" e um item em sinais_alerta.
 
 Transcrição:
 \"\"\"{texto}\"\"\""""
 
 
-def resumir(texto: str, tipo: str) -> dict:
+def _normalizar(t):
+    t = unicodedata.normalize("NFKD", (t or "").lower())
+    t = "".join(ch for ch in t if not unicodedata.combining(ch))
+    return " ".join(re.sub(r"[^a-z0-9\[\] ]+", " ", t).split())
+
+
+def trecho_confere(trecho, texto_normalizado):
+    """O trecho citado pela IA precisa existir de fato na transcrição."""
+    n = _normalizar(trecho)
+    return len(n) >= 6 and n in texto_normalizado
+
+
+def resumir(texto: str, tipo: str, indicadores) -> dict:
+    """indicadores: lista (campo, rótulo, positivo). Só aceita valores com trecho encontrado no texto."""
     if modo_avaliacao():
-        dados = dict(RESUMO_SIMULADO)
-        dados["resumo"] = AVISO_SIMULACAO + " " + dados["resumo"]
-        return dados
+        return _resumo_simulado()
+    campos = [c for c, _, _ in indicadores]
     origem = ("uma gravação da própria sessão (terapeuta e paciente conversando)" if tipo == "consulta"
               else "um áudio em que o terapeuta relata como foi a sessão")
-    bruto = chamar_claude(PROMPT_RESUMO.format(origem=origem, texto=texto[:120000]), max_tokens=1500)
+    prompt = PROMPT_RESUMO.format(origem=origem, texto=texto[:120000], chaves=", ".join(f'"{c}"' for c in campos),
+                                  significados="; ".join(f"{c} = {r.lower()}" for c, r, _ in indicadores))
+    bruto = chamar_claude(prompt, max_tokens=2500)
     bruto = re.sub(r"^```(?:json)?|```$", "", bruto.strip()).strip()
     inicio, fim = bruto.find("{"), bruto.rfind("}")
     try:
         dados = json.loads(bruto[inicio:fim + 1])
     except (ValueError, TypeError):
         raise ErroVoz("A IA respondeu num formato inesperado. Tente gerar o resumo de novo.")
+    return validar_resumo(dados, texto, campos)
 
-    def inteiro(v, lo, hi):
-        try:
-            return max(lo, min(hi, int(v)))
-        except (TypeError, ValueError):
+
+def validar_resumo(dados, texto, campos):
+    base = _normalizar(texto)
+    saida = {"evidencias": {}, "descartados": []}
+
+    def item(chave, bruto, lo=None, hi=None, booleano=False):
+        bruto = bruto if isinstance(bruto, dict) else {"valor": bruto, "trecho": ""}
+        valor, trecho = bruto.get("valor"), str(bruto.get("trecho") or "").strip()
+        if booleano:
+            valor = valor if isinstance(valor, bool) else None
+        else:
+            try:
+                valor = max(lo, min(hi, int(valor)))
+            except (TypeError, ValueError):
+                valor = None
+        if valor is None:
             return None
+        if not trecho_confere(trecho, base):
+            saida["descartados"].append(chave)  # sem prova na transcrição: não entra
+            return None
+        saida["evidencias"][chave] = trecho[:300]
+        return valor
 
-    alertas = [str(a)[:200] for a in (dados.get("sinais_alerta") or []) if a][:8]
+    saida["humor"] = item("humor", dados.get("humor"), 1, 5)
+    saida["uso_recente"] = item("uso_recente", dados.get("uso_recente"), booleano=True)
+    ind = dados.get("indicadores") or {}
+    for c in campos:
+        saida[c] = item(c, ind.get(c), 0, 10)
+
+    alertas = []
+    for a in (dados.get("sinais_alerta") or [])[:8]:
+        if isinstance(a, dict):
+            txt, tr = str(a.get("texto") or "").strip(), str(a.get("trecho") or "").strip()
+        else:
+            txt, tr = str(a).strip(), ""
+        if txt:  # alertas nunca são descartados; só marcamos quando o trecho não foi encontrado
+            alertas.append({"texto": txt[:200], "trecho": tr[:300] if trecho_confere(tr, base) else ""})
     risco = dados.get("risco") if dados.get("risco") in ("baixo", "moderado", "alto", "critico") else "baixo"
     if alertas and risco == "baixo":
         risco = "moderado"
-    uso = dados.get("uso_recente")
-    return {
+    saida.update({
         "resumo": str(dados.get("resumo") or "").strip(),
-        "humor": inteiro(dados.get("humor"), 1, 5),
-        "ansiedade": inteiro(dados.get("ansiedade"), 0, 10),
-        "motivacao": inteiro(dados.get("motivacao"), 0, 10),
-        "fissura": inteiro(dados.get("fissura"), 0, 10),
-        "uso_recente": uso if isinstance(uso, bool) else None,
-        "risco": risco,
-        "sinais_alerta": alertas,
+        "risco": risco, "sinais_alerta": alertas,
         "abordagens": str(dados.get("abordagens") or "")[:200],
         "tarefa_paciente": str(dados.get("tarefa_paciente") or "")[:300],
+    })
+    return saida
+
+
+def _resumo_simulado():
+    base = TEXTO_SIMULADO
+    bruto = {
+        "resumo": AVISO_SIMULACAO + " " + RESUMO_SIMULADO["resumo"],
+        "humor": {"valor": 4, "trecho": "chegou mais tranquilo do que na semana passada"},
+        "uso_recente": {"valor": False, "trecho": "conseguiu passar o fim de semana sem usar"},
+        "indicadores": {
+            "ansiedade": {"valor": 5, "trecho": "Ansiedade em torno de cinco por causa do trabalho"},
+            "fissura": {"valor": 6, "trecho": "a fissura apareceu no sábado à noite, perto de seis"},
+            "sono": {"valor": 6, "trecho": "Dormiu melhor em três noites"},
+            "motivacao": {"valor": 7, "trecho": "vai anotar os gatilhos no check-in"},
+            "isolamento": {"valor": 3, "trecho": "ligou para o irmão"},
+        },
+        "risco": "moderado",
+        "sinais_alerta": [{"texto": "Exposição a convites sociais com oferta da substância",
+                           "trecho": "um convite para uma festa"}],
+        "abordagens": RESUMO_SIMULADO["abordagens"], "tarefa_paciente": RESUMO_SIMULADO["tarefa_paciente"],
     }
+    return validar_resumo(bruto, base, ["ansiedade", "motivacao", "fissura", "tristeza", "irritabilidade",
+                                        "sono", "energia", "abstinencia", "isolamento", "autoestima"])

@@ -94,12 +94,28 @@ def para_float(txt, padrao=None):
 
 
 # ============================================================ constantes
+VERSAO = "v6"  # aumente a cada entrega; aparece no rodapé do app
 HUMOR = {1: ("😞", "Muito mal"), 2: ("😔", "Mal"), 3: ("😐", "Regular"), 4: ("🙂", "Bem"), 5: ("😊", "Muito bem")}
 RISCO = {"baixo": "Baixo", "moderado": "Moderado", "alto": "Alto", "critico": "Crítico"}
 STATUS_PACIENTE = {"ativo": "Ativo", "pausado": "Pausado", "alta": "Alta", "inativo": "Inativo"}
 STATUS_CONSULTA = {"agendada": "Agendada", "realizada": "Realizada", "faltou": "Faltou", "cancelada": "Cancelada"}
 TIPO_CONSULTA = {"individual": "Individual", "familiar": "Familiar", "grupo": "Grupo", "online": "Online"}
 RESULTADO_TESTE = {"negativo": "Negativo", "positivo": "Positivo", "inconclusivo": "Inconclusivo"}
+TIPOS_TESTE = ["Multi 1", "Multi 2", "Multi 3", "Multi 6", "Multi 9", "Multi 12"]
+# Indicadores pós-sessão (0 a 10). positivo=True quando um valor mais alto é melhor.
+INDICADORES = [
+    ("ansiedade", "Ansiedade", False),
+    ("motivacao", "Motivação", True),
+    ("fissura", "Fissura", False),
+    ("tristeza", "Tristeza", False),
+    ("irritabilidade", "Irritabilidade", False),
+    ("sono", "Qualidade do sono", True),
+    ("energia", "Energia e disposição", True),
+    ("abstinencia", "Sintomas físicos de abstinência", False),
+    ("isolamento", "Isolamento social", False),
+    ("autoestima", "Autoestima", True),
+]
+CAMPOS_INDICADORES = [c for c, _, _ in INDICADORES]
 SUBSTANCIAS = ["Álcool", "Tabaco/nicotina", "Maconha", "Cocaína", "Crack", "Benzodiazepínicos",
                "Opioides", "Anfetaminas", "Ecstasy/MDMA", "Inalantes", "Jogo", "Outra"]
 GATILHOS = ["Estresse", "Solidão", "Tédio", "Raiva", "Tristeza", "Cansaço", "Festa ou evento",
@@ -137,6 +153,7 @@ class Paciente(UserMixin, db.Model):
     telefone = db.Column(db.String(30))
     email = db.Column(db.String(160), unique=True)
     substancias = db.Column(db.String(300))
+    tipo_teste = db.Column(db.String(12))  # Multi 1 … Multi 12, ou "nenhum"
     tempo_uso = db.Column(db.String(60))
     status = db.Column(db.String(12), default="ativo")
     inicio_tratamento = db.Column(db.Date)
@@ -207,8 +224,20 @@ class Consulta(db.Model):
     tipo = db.Column(db.String(20), default="individual")
     status = db.Column(db.String(20), default="agendada")
     notas_pre = db.Column(db.Text)
+    checkin_em = db.Column(db.DateTime)    # início real do atendimento
+    checkout_em = db.Column(db.DateTime)   # fim real do atendimento
     paciente = db.relationship("Paciente")
     registro = db.relationship("Registro", uselist=False, back_populates="consulta")
+
+    @property
+    def em_atendimento(self):
+        return bool(self.checkin_em and not self.checkout_em)
+
+    @property
+    def minutos_atendidos(self):
+        if self.checkin_em and self.checkout_em and self.checkout_em > self.checkin_em:
+            return round((self.checkout_em - self.checkin_em).total_seconds() / 60)
+        return None
 
 
 class Registro(db.Model):
@@ -227,6 +256,14 @@ class Registro(db.Model):
     data_uso = db.Column(db.Date)
     teste_feito = db.Column(db.Boolean, default=False)
     teste_resultado = db.Column(db.String(15))
+    teste_tipo = db.Column(db.String(12))
+    tristeza = db.Column(db.Integer)
+    irritabilidade = db.Column(db.Integer)
+    sono = db.Column(db.Integer)
+    energia = db.Column(db.Integer)
+    abstinencia = db.Column(db.Integer)
+    isolamento = db.Column(db.Integer)
+    autoestima = db.Column(db.Integer)
     risco = db.Column(db.String(10), default="baixo")
     abordagens = db.Column(db.String(200))
     comentarios = db.Column(db.Text)
@@ -282,8 +319,9 @@ class Transcricao(db.Model):
     consulta_id = db.Column(db.Integer, db.ForeignKey("consulta.id"))
     registro_id = db.Column(db.Integer, db.ForeignKey("registro.id"))
     tipo = db.Column(db.String(10), nullable=False)  # resumo | consulta
-    status = db.Column(db.String(12), default="gravando")  # gravando | pronta | revisada | erro
+    status = db.Column(db.String(12), default="gravando")  # gravando | transcrita | pronta | revisada | erro
     texto = db.Column(db.Text, default="")
+    texto_original = db.Column(db.Text)  # transcrição como saiu, antes das correções do terapeuta
     partes = db.Column(db.Integer, default=0)
     falhas = db.Column(db.Integer, default=0)
     segundos = db.Column(db.Integer, default=0)
@@ -304,6 +342,29 @@ class Transcricao(db.Model):
 def consentimento_ativo(p):
     return (Consentimento.query.filter_by(paciente_id=p.id, revogado_em=None)
             .order_by(Consentimento.assinado_em.desc()).first())
+
+
+class EstoqueTeste(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    terapeuta_id = db.Column(db.Integer, db.ForeignKey("terapeuta.id"), nullable=False, index=True)
+    tipo = db.Column(db.String(12), nullable=False)
+    quantidade = db.Column(db.Integer, default=0)
+    minimo = db.Column(db.Integer, default=5)
+    __table_args__ = (db.UniqueConstraint("terapeuta_id", "tipo"),)
+
+
+def estoques(terapeuta):
+    """Um registro por tipo de teste, criado na primeira vez."""
+    atuais = {e.tipo: e for e in EstoqueTeste.query.filter_by(terapeuta_id=terapeuta.id)}
+    novos = False
+    for tipo in TIPOS_TESTE:
+        if tipo not in atuais:
+            atuais[tipo] = EstoqueTeste(terapeuta_id=terapeuta.id, tipo=tipo, quantidade=0, minimo=5)
+            db.session.add(atuais[tipo])
+            novos = True
+    if novos:
+        db.session.commit()
+    return [atuais[t] for t in TIPOS_TESTE]
 
 
 class DemoItem(db.Model):
@@ -334,6 +395,8 @@ def carregar_usuario(uid):
     if tipo == "t":
         return db.session.get(Terapeuta, num)
     p = db.session.get(Paciente, num)
+    if p and session.get("demo_como") == p.id:
+        return p  # visualização de paciente demo pelo terapeuta
     return p if p and p.tem_acesso and p.status != "inativo" else None
 
 
@@ -465,9 +528,9 @@ def contexto():
     saudacao = "Bom dia" if agora().hour < 12 else "Boa tarde" if agora().hour < 18 else "Boa noite"
     return dict(csrf_token=csrf_token, HUMOR=HUMOR, RISCO=RISCO, STATUS_PACIENTE=STATUS_PACIENTE,
                 STATUS_CONSULTA=STATUS_CONSULTA, TIPO_CONSULTA=TIPO_CONSULTA, CATEGORIAS=CATEGORIAS,
-                RESULTADO_TESTE=RESULTADO_TESTE, SUBSTANCIAS=SUBSTANCIAS, GATILHOS=GATILHOS,
+                RESULTADO_TESTE=RESULTADO_TESTE, TIPOS_TESTE=TIPOS_TESTE, INDICADORES=INDICADORES, SUBSTANCIAS=SUBSTANCIAS, GATILHOS=GATILHOS,
                 hoje=hoje(), saudacao=saudacao, ia_ativa=voz.ia_ativa(), transcricao_ativa=voz.transcricao_ativa(),
-                modo_avaliacao=voz.modo_avaliacao())
+                modo_avaliacao=voz.modo_avaliacao(), vendo_como=session.get("demo_como"), VERSAO=VERSAO)
 
 
 # ============================================================ regras clínicas
@@ -511,8 +574,10 @@ def feedback_ia(r):
     """Envia só dados clínicos, sem nome, telefone ou e-mail."""
     dados = {
         "substancias": r.paciente.lista_substancias, "dias_sem_uso": r.paciente.dias_limpo,
-        "humor_1a5": r.humor, "ansiedade_0a10": r.ansiedade, "motivacao_0a10": r.motivacao,
-        "fissura_0a10": r.fissura, "uso_recente": r.uso_recente, "teste": r.teste_resultado if r.teste_feito else None,
+        "humor_1a5": r.humor,
+        "indicadores_0a10": {rot: getattr(r, c) for c, rot, _ in INDICADORES if getattr(r, c) is not None},
+        "uso_recente": r.uso_recente,
+        "teste": f"{r.teste_tipo or ''} {r.teste_resultado or ''}".strip() if r.teste_feito else None,
         "risco": r.risco, "abordagens": r.abordagens,
         "observacoes": voz.anonimizar(r.comentarios or "", [r.paciente.nome]),
     }
@@ -657,9 +722,15 @@ def painel():
     n_recentes = Registro.query.filter_by(terapeuta_id=current_user.id).filter(Registro.data >= hoje() - timedelta(days=7)).count()
     tem_demo = DemoItem.query.filter_by(terapeuta_id=current_user.id).first() is not None
     total = Paciente.query.filter_by(terapeuta_id=current_user.id).count()
+    lista_estoque = estoques(current_user)
+    em_atendimento = (Consulta.query.filter_by(terapeuta_id=current_user.id)
+                      .filter(Consulta.checkin_em.isnot(None), Consulta.checkout_em.is_(None)).all())
+    mes = resumo_mes(current_user.id, hoje().year, hoje().month)
     return render_template("terapeuta/painel.html", consultas=consultas, atencao=atencao,
                            ativos=len(ativos), recentes=recentes, n_recentes=n_recentes,
-                           tem_demo=tem_demo, total_pacientes=total)
+                           tem_demo=tem_demo, total_pacientes=total, estoques=lista_estoque,
+                           baixos=[e for e in lista_estoque if e.quantidade < e.minimo and e.minimo > 0],
+                           em_atendimento=em_atendimento, mes=mes)
 
 
 @app.route("/t/demo/carregar", methods=["POST"])
@@ -687,14 +758,17 @@ def demo_apagar():
 @app.route("/t/estoque", methods=["POST"])
 @exige("terapeuta")
 def estoque():
-    acao = request.form.get("acao")
-    if acao == "mais":
-        current_user.estoque_testes += 1
-    elif acao == "menos":
-        current_user.estoque_testes = max(0, current_user.estoque_testes - 1)
+    lista = {e.tipo: e for e in estoques(current_user)}
+    acao, tipo = request.form.get("acao"), request.form.get("tipo")
+    if acao in ("mais", "menos") and tipo in lista:
+        e = lista[tipo]
+        e.quantidade = e.quantidade + 1 if acao == "mais" else max(0, e.quantidade - 1)
     elif acao == "definir":
-        current_user.estoque_testes = para_int(request.form.get("qtd"), current_user.estoque_testes, 0)
-        current_user.estoque_minimo = para_int(request.form.get("minimo"), current_user.estoque_minimo, 0)
+        for i, t in enumerate(TIPOS_TESTE):
+            e = lista[t]
+            e.quantidade = para_int(request.form.get(f"qtd_{i}"), e.quantidade, 0, 100000)
+            e.minimo = para_int(request.form.get(f"min_{i}"), e.minimo, 0, 100000)
+        flash("Estoque atualizado.", "ok")
     db.session.commit()
     return redirect(url_for("painel") + "#estoque")
 
@@ -727,6 +801,8 @@ def salvar_paciente(p, f):
     if outra:
         subs = [s for s in subs if s != "Outra"] + [outra[:40]]
     p.substancias = "|".join(subs) or None
+    tipo_teste = f.get("tipo_teste", "")
+    p.tipo_teste = tipo_teste if tipo_teste in TIPOS_TESTE or tipo_teste == "nenhum" else None
     p.tempo_uso = f.get("tempo_uso", "").strip()[:60] or None
     p.status = f.get("status") if f.get("status") in STATUS_PACIENTE else "ativo"
     p.inicio_tratamento = para_data(f.get("inicio_tratamento"))
@@ -739,6 +815,8 @@ def salvar_paciente(p, f):
     p.anamnese = f.get("anamnese", "").strip() or None
     if not p.nome:
         return "Informe o nome do paciente."
+    if not p.tipo_teste:
+        return "Escolha o tipo de teste toxicológico do paciente (ou “Não faz teste”)."
     return None
 
 
@@ -774,7 +852,9 @@ def paciente_detalhe(pid):
     return render_template("terapeuta/paciente.html", p=p, registros=registros[:10], checkins=checkins[:7],
                            proximas=proximas, pagamentos=pagamentos, feitas=feitas, prox=prox,
                            grafico=serie_diaria(pontos), saldo=p.saldo_sessoes(), link=link, motivos=alertas(p),
-                           consentimento=consentimento_ativo(p))
+                           consentimento=consentimento_ativo(p),
+                           e_demo=DemoItem.query.filter_by(terapeuta_id=current_user.id, tipo="paciente", ref_id=p.id).first() is not None,
+                           ultimo_registro=registros[0] if registros else None)
 
 
 @app.route("/t/pacientes/<int:pid>/convite", methods=["POST"])
@@ -848,6 +928,18 @@ def consulta_form(cid=None):
             c.tipo = f.get("tipo") if f.get("tipo") in TIPO_CONSULTA else "individual"
             c.status = f.get("status") if f.get("status") in STATUS_CONSULTA else "agendada"
             c.notas_pre = f.get("notas_pre", "").strip() or None
+            def hora_real(campo):
+                try:
+                    return datetime.fromisoformat(f"{f['data']}T{f[campo]}") if f.get(campo) else None
+                except ValueError:
+                    return None
+            ci, co = hora_real("checkin_hora"), hora_real("checkout_hora")
+            if co and ci and co <= ci:
+                co += timedelta(days=1)  # atendimento que passou da meia-noite
+            if f.get("checkin_hora") is not None:
+                c.checkin_em, c.checkout_em = ci, (co if ci else None)
+                if c.minutos_atendidos and c.status == "agendada":
+                    c.status = "realizada"
             db.session.add(c)
             db.session.commit()
             flash("Sessão salva.", "ok")
@@ -867,6 +959,132 @@ def excluir_consulta(cid):
     db.session.commit()
     flash("Sessão excluída.", "ok")
     return redirect(url_for("agenda", dia=dia))
+
+
+# ============================================================ atendimento: check-in, check-out e relatório
+@app.route("/t/agenda/<int:cid>/checkin", methods=["POST"])
+@exige("terapeuta")
+def consulta_checkin(cid):
+    c = minha_consulta(cid)
+    if c.status == "cancelada":
+        flash("Esta sessão está cancelada.", "erro")
+    elif not c.checkin_em:
+        c.checkin_em, c.checkout_em = agora(), None
+        db.session.commit()
+        flash(f"Check-in às {c.checkin_em:%H:%M}. Bom atendimento.", "ok")
+    return redirect(request.form.get("voltar") or url_for("agenda", dia=c.inicio.date().isoformat()))
+
+
+@app.route("/t/agenda/<int:cid>/checkout", methods=["POST"])
+@exige("terapeuta")
+def consulta_checkout(cid):
+    c = minha_consulta(cid)
+    if not c.checkin_em:
+        flash("Faça o check-in antes do check-out.", "erro")
+        return redirect(request.form.get("voltar") or url_for("agenda"))
+    if not c.checkout_em:
+        c.checkout_em = agora()
+        c.status = "realizada"
+        db.session.commit()
+        flash(f"Check-out às {c.checkout_em:%H:%M}. Atendimento de {c.minutos_atendidos} min.", "ok")
+    if not c.registro:
+        return redirect(url_for("fim_sessao", consulta=c.id))
+    return redirect(request.form.get("voltar") or url_for("agenda", dia=c.inicio.date().isoformat()))
+
+
+@app.route("/t/agenda/<int:cid>/desfazer-checkin", methods=["POST"])
+@exige("terapeuta")
+def consulta_desfazer(cid):
+    c = minha_consulta(cid)
+    c.checkin_em = c.checkout_em = None
+    if c.status == "realizada" and not c.registro:
+        c.status = "agendada"
+    db.session.commit()
+    flash("Check-in desfeito.", "ok")
+    return redirect(request.form.get("voltar") or url_for("agenda", dia=c.inicio.date().isoformat()))
+
+
+def resumo_mes(terapeuta_id, ano, mes):
+    ini = datetime(ano, mes, 1)
+    fim = datetime(ano + (mes == 12), mes % 12 + 1, 1)
+    consultas = (Consulta.query.filter_by(terapeuta_id=terapeuta_id)
+                 .filter(Consulta.inicio >= ini, Consulta.inicio < fim).all())
+    atendidas = [c for c in consultas if c.minutos_atendidos]
+    minutos = sum(c.minutos_atendidos for c in atendidas)
+    ndias = (fim - ini).days
+    por_dia = [0] * ndias
+    for c in atendidas:
+        por_dia[c.checkin_em.day - 1 if c.checkin_em.month == mes else c.inicio.day - 1] += c.minutos_atendidos
+    por_paciente = {}
+    for c in atendidas:
+        item = por_paciente.setdefault(c.paciente_id, {"paciente": c.paciente, "minutos": 0, "sessoes": 0})
+        item["minutos"] += c.minutos_atendidos
+        item["sessoes"] += 1
+    atrasos = [round((c.checkin_em - c.inicio).total_seconds() / 60) for c in atendidas]
+    return {
+        "ano": ano, "mes": mes, "rotulo": f"{MESES[mes - 1]} de {ano}",
+        "minutos": minutos, "atendimentos": len(atendidas),
+        "media": round(minutos / len(atendidas)) if atendidas else 0,
+        "planejado": sum(c.duracao or 0 for c in atendidas),
+        "sem_checkin": sum(1 for c in consultas if c.status == "realizada" and not c.minutos_atendidos),
+        "faltas": sum(1 for c in consultas if c.status == "faltou"),
+        "canceladas": sum(1 for c in consultas if c.status == "cancelada"),
+        "atraso_medio": round(sum(atrasos) / len(atrasos)) if atrasos else 0,
+        "por_dia": por_dia,
+        "por_paciente": sorted(por_paciente.values(), key=lambda x: -x["minutos"]),
+    }
+
+
+@app.template_filter("horas")
+def horas(minutos):
+    minutos = int(minutos or 0)
+    h, m = divmod(minutos, 60)
+    return f"{h}h{m:02d}" if h else f"{m} min"
+
+
+@app.route("/t/relatorio")
+@exige("terapeuta")
+def relatorio():
+    try:
+        ano, mes = map(int, (request.args.get("mes") or f"{hoje():%Y-%m}").split("-"))
+        assert 1 <= mes <= 12 and 2000 <= ano <= 2100
+    except (ValueError, AssertionError):
+        ano, mes = hoje().year, hoje().month
+    atual = resumo_mes(current_user.id, ano, mes)
+    ant_ano, ant_mes = (ano - 1, 12) if mes == 1 else (ano, mes - 1)
+    anterior = resumo_mes(current_user.id, ant_ano, ant_mes)
+    prox = (ano + 1, 1) if mes == 12 else (ano, mes + 1)
+    maior = max(atual["por_dia"] + [1])
+    return render_template("terapeuta/relatorio.html", r=atual, anterior=anterior, maior=maior,
+                           link_ant=f"{ant_ano}-{ant_mes:02d}", link_prox=f"{prox[0]}-{prox[1]:02d}",
+                           e_futuro=(prox[0], prox[1]) > (hoje().year, hoje().month))
+
+
+# ============================================================ ver como paciente (só pacientes demo)
+@app.route("/t/pacientes/<int:pid>/ver-como", methods=["POST"])
+@exige("terapeuta")
+def ver_como_paciente(pid):
+    p = meu_paciente(pid)
+    if not DemoItem.query.filter_by(terapeuta_id=current_user.id, tipo="paciente", ref_id=p.id).first():
+        flash("A visualização como paciente está disponível só para pacientes de demonstração.", "erro")
+        return redirect(url_for("paciente_detalhe", pid=p.id))
+    tid = current_user.id
+    logout_user()
+    session["demo_como"], session["demo_terapeuta"] = p.id, tid
+    login_user(p, remember=False)
+    return redirect(url_for("casa"))
+
+
+@app.route("/demo/voltar", methods=["POST"])
+@login_required
+def demo_voltar():
+    tid, pid = session.pop("demo_terapeuta", None), session.pop("demo_como", None)
+    t = db.session.get(Terapeuta, tid) if tid else None
+    logout_user()
+    if not t:
+        return redirect(url_for("entrar"))
+    login_user(t, remember=True)
+    return redirect(url_for("paciente_detalhe", pid=pid) if pid else url_for("painel"))
 
 
 # ============================================================ terapeuta: registros
@@ -909,7 +1127,7 @@ def registro_form(cid=None, pid=None, rid=None):
             abort(404)
     if request.method == "GET" and t and t.dados:
         d = t.dados
-        for campo in ("humor", "ansiedade", "motivacao", "fissura", "abordagens", "tarefa_paciente"):
+        for campo in ["humor", "abordagens", "tarefa_paciente"] + CAMPOS_INDICADORES:
             if d.get(campo) not in (None, ""):
                 setattr(r, campo, d[campo])
         if d.get("uso_recente") is not None:
@@ -923,13 +1141,14 @@ def registro_form(cid=None, pid=None, rid=None):
         r.realizada = f.get("realizada", "1") == "1"
         r.data = para_data(f.get("data")) or r.data
         r.humor = para_int(f.get("humor"), None, 1, 5)
-        r.ansiedade = para_int(f.get("ansiedade"), None, 0, 10)
-        r.motivacao = para_int(f.get("motivacao"), None, 0, 10)
-        r.fissura = para_int(f.get("fissura"), None, 0, 10)
+        for campo in CAMPOS_INDICADORES:
+            setattr(r, campo, para_int(f.get(campo), None, 0, 10))
         r.uso_recente = f.get("uso_recente") == "1"
         r.data_uso = para_data(f.get("data_uso")) if r.uso_recente else None
         r.teste_feito = f.get("teste_feito") == "1"
         r.teste_resultado = f.get("teste_resultado") if r.teste_feito and f.get("teste_resultado") in RESULTADO_TESTE else None
+        tipo_antes = r.teste_tipo
+        r.teste_tipo = (f.get("teste_tipo") if f.get("teste_tipo") in TIPOS_TESTE else None) if r.teste_feito else None
         r.risco = f.get("risco") if f.get("risco") in RISCO else "baixo"
         r.abordagens = f.get("abordagens", "").strip()[:200] or None
         r.comentarios = f.get("comentarios", "").strip() or None
@@ -938,8 +1157,13 @@ def registro_form(cid=None, pid=None, rid=None):
             paciente.registrar_uso(r.data_uso or r.data)
         if r.teste_feito and r.teste_resultado == "positivo":
             paciente.registrar_uso(r.data)
-        if r.teste_feito and not teste_antes:
-            current_user.estoque_testes = max(0, current_user.estoque_testes - 1)
+        estoque_usado = None
+        lista = {e.tipo: e for e in estoques(current_user)}
+        if teste_antes and tipo_antes in lista and (not r.teste_feito or r.teste_tipo != tipo_antes):
+            lista[tipo_antes].quantidade += 1  # devolve ao estoque se o teste foi desmarcado ou trocado
+        if r.teste_feito and r.teste_tipo in lista and (not teste_antes or r.teste_tipo != tipo_antes):
+            estoque_usado = lista[r.teste_tipo]
+            estoque_usado.quantidade = max(0, estoque_usado.quantidade - 1)
         consulta = db.session.get(Consulta, r.consulta_id) if r.consulta_id else None
         if consulta:
             consulta.status = "realizada" if r.realizada else "faltou"
@@ -948,13 +1172,17 @@ def registro_form(cid=None, pid=None, rid=None):
         if t:
             t.registro_id, t.status = r.id, "revisada"
         db.session.commit()
-        if r.teste_feito and not teste_antes and current_user.estoque_testes < current_user.estoque_minimo:
-            flash(f"Registro salvo. Restam {current_user.estoque_testes} testes toxicológicos; hora de repor.", "aviso")
+        if estoque_usado and estoque_usado.quantidade < estoque_usado.minimo:
+            flash(f"Registro salvo. Restam {estoque_usado.quantidade} testes {estoque_usado.tipo}; hora de repor.", "aviso")
         else:
             flash("Registro salvo.", "ok")
         return redirect(url_for("registro_detalhe", rid=r.id))
     cons = db.session.get(Consulta, r.consulta_id) if r.consulta_id else None
-    return render_template("terapeuta/registro_form.html", r=r, p=paciente, t=t, cons=cons)
+    if not r.id and not r.teste_tipo and paciente.tipo_teste in TIPOS_TESTE:
+        r.teste_tipo = paciente.tipo_teste
+    evid = (t.dados.get("evidencias") or {}) if t else {}
+    return render_template("terapeuta/registro_form.html", r=r, p=paciente, t=t, cons=cons, evid=evid,
+                           estoque_por_tipo={e.tipo: e.quantidade for e in estoques(current_user)})
 
 
 @app.route("/t/registros/<int:rid>")
@@ -962,7 +1190,8 @@ def registro_form(cid=None, pid=None, rid=None):
 def registro_detalhe(rid):
     r = meu_registro(rid)
     t = Transcricao.query.filter_by(registro_id=r.id).first()
-    return render_template("terapeuta/registro.html", r=r, t=t)
+    cons = db.session.get(Consulta, r.consulta_id) if r.consulta_id else None
+    return render_template("terapeuta/registro.html", r=r, t=t, cons=cons)
 
 
 @app.route("/t/registros/<int:rid>/ia", methods=["POST"])
@@ -1057,7 +1286,7 @@ def fim_sessao():
     lista = (Paciente.query.filter_by(terapeuta_id=current_user.id)
              .filter(Paciente.status.in_(["ativo", "pausado"])).order_by(Paciente.nome).all())
     pendentes = (Transcricao.query.filter_by(terapeuta_id=current_user.id)
-                 .filter(Transcricao.status.in_(["pronta", "erro", "gravando"]))
+                 .filter(Transcricao.status.in_(["transcrita", "pronta", "erro", "gravando"]))
                  .order_by(Transcricao.criado_em.desc()).limit(20).all())
     consentidos = {c.paciente_id for c in Consentimento.query.filter_by(terapeuta_id=current_user.id, revogado_em=None)}
     sel_c = para_int(request.args.get("consulta"))
@@ -1135,15 +1364,29 @@ def gravacao_concluir(tid):
         t.status, t.erro = "erro", "Nenhuma fala foi reconhecida na gravação."
         db.session.commit()
         return jsonify(url=url_for("gravacao_ver", tid=t.id))
-    if voz.ia_ativa():
-        try:
-            dados = voz.resumir(voz.anonimizar(t.texto, [t.paciente.nome]), t.tipo)
-            t.sugestao, t.erro = json.dumps(dados, ensure_ascii=False), None
-        except voz.ErroVoz as e:
-            t.erro = str(e)
-    t.status = "pronta"
+    t.texto_original = t.texto  # guarda a versão exata que saiu da transcrição
+    t.status = "transcrita"     # o resumo só é gerado depois que o terapeuta revisar o texto
     db.session.commit()
     return jsonify(url=url_for("gravacao_ver", tid=t.id))
+
+
+@app.route("/t/gravacao/<int:tid>/texto", methods=["POST"])
+@exige("terapeuta")
+def gravacao_texto(tid):
+    t = minha_transcricao(tid)
+    novo = (request.form.get("texto") or "").strip()
+    if not novo:
+        flash("A transcrição não pode ficar vazia.", "erro")
+        return redirect(url_for("gravacao_ver", tid=t.id))
+    if novo != (t.texto or "").strip():
+        t.texto = novo
+        if t.sugestao:
+            t.sugestao, t.status = None, "transcrita"  # resumo antigo não vale para o texto corrigido
+    db.session.commit()
+    if request.form.get("gerar") == "1":
+        return gravacao_resumir(t.id)
+    flash("Correções salvas.", "ok")
+    return redirect(url_for("gravacao_ver", tid=t.id))
 
 
 @app.route("/t/gravacao/<int:tid>/resumir", methods=["POST"])
@@ -1151,9 +1394,10 @@ def gravacao_concluir(tid):
 def gravacao_resumir(tid):
     t = minha_transcricao(tid)
     try:
-        dados = voz.resumir(voz.anonimizar(t.texto or "", [t.paciente.nome]), t.tipo)
+        anon = voz.anonimizar(t.texto or "", [t.paciente.nome])
+        dados = voz.resumir(anon, t.tipo, INDICADORES)
         t.sugestao, t.erro, t.status = json.dumps(dados, ensure_ascii=False), None, "pronta"
-        flash("Resumo gerado.", "ok")
+        flash("Resumo gerado a partir da transcrição revisada.", "ok")
     except voz.ErroVoz as e:
         t.erro = str(e)
         flash(str(e), "erro")
@@ -1244,12 +1488,15 @@ def artigo_form(aid=None):
 def casa():
     p = current_user
     ck = CheckIn.query.filter_by(paciente_id=p.id, data=hoje()).first()
-    proxima = (Consulta.query.filter_by(paciente_id=p.id, status="agendada").filter(Consulta.inicio >= agora())
-               .order_by(Consulta.inicio).first())
+    proximas = (Consulta.query.filter_by(paciente_id=p.id, status="agendada").filter(Consulta.inicio >= agora())
+                .order_by(Consulta.inicio).limit(3).all())
     tarefa = (Registro.query.filter_by(paciente_id=p.id).filter(Registro.tarefa_paciente.isnot(None))
               .order_by(Registro.data.desc(), Registro.id.desc()).first())
+    cks = CheckIn.query.filter_by(paciente_id=p.id).order_by(CheckIn.data.desc()).limit(30).all()
     feitas, prox = p.conquistas()
-    return render_template("paciente/casa.html", ck=ck, proxima=proxima, tarefa=tarefa, feitas=feitas, prox=prox)
+    return render_template("paciente/casa.html", ck=ck, proximas=proximas, tarefa=tarefa, feitas=feitas, prox=prox,
+                           recentes=cks[:5], grafico=serie_diaria([(c.data, c.fissura) for c in cks]),
+                           saldo=p.saldo_sessoes() if p.valor_sessao or Pagamento.query.filter_by(paciente_id=p.id).first() else None)
 
 
 @app.route("/p/checkin", methods=["GET", "POST"])
@@ -1341,9 +1588,29 @@ def erro(e):
 
 
 # ============================================================ inicialização
+def migrar_colunas():
+    """Adiciona colunas novas a tabelas já existentes (create_all não faz isso)."""
+    from sqlalchemy import inspect, text
+    insp = inspect(db.engine)
+    for tabela in db.metadata.sorted_tables:
+        if not insp.has_table(tabela.name):
+            continue
+        existentes = {c["name"] for c in insp.get_columns(tabela.name)}
+        for col in tabela.columns:
+            if col.name in existentes:
+                continue
+            tipo = col.type.compile(dialect=db.engine.dialect)
+            try:
+                with db.engine.begin() as conn:
+                    conn.execute(text(f'ALTER TABLE "{tabela.name}" ADD COLUMN "{col.name}" {tipo}'))
+            except Exception:
+                pass  # outro processo pode ter criado a coluna ao mesmo tempo
+
+
 def iniciar_banco():
     with app.app_context():
         db.create_all()
+        migrar_colunas()
         if Artigo.query.filter_by(autor_id=None).count() == 0:
             from conteudo_base import ARTIGOS
             for a in ARTIGOS:

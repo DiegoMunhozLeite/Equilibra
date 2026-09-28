@@ -11,25 +11,41 @@
     <a class="numero largo" href="{{ url_for('registros') }}" style="color:inherit"><div class="ic" style="background:var(--ambar-claro)">📋</div><div><b>{{ n_recentes }}</b><span>Registros nos últimos 7 dias</span></div></a>
   </div>
 
-  {% set baixo = current_user.estoque_testes < current_user.estoque_minimo %}
-  <div id="estoque" class="cartao estoque {{ 'baixo' if baixo }}" style="margin-top:12px">
-    <div class="ic" style="font-size:1.5rem">🧪</div>
-    <div class="txt"><b>Testes toxicológicos</b>
-      {% if baixo %}<div class="aviso">Abaixo de {{ current_user.estoque_minimo }}. Hora de repor.</div>{% endif %}</div>
-    <form method="post" action="{{ url_for('estoque') }}" class="contador">
-      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-      <button name="acao" value="menos" aria-label="Diminuir">−</button>
-      <b aria-live="polite">{{ current_user.estoque_testes }}</b>
-      <button name="acao" value="mais" aria-label="Aumentar">+</button>
-    </form>
+  {% for c in em_atendimento %}
+  <a class="atendendo" href="{{ url_for('agenda', dia=c.inicio.date().isoformat()) }}" style="margin-top:12px;color:inherit"><span class="ponto" aria-hidden="true"></span>
+    <div class="meio"><b>Em atendimento: {{ c.paciente.nome }}</b><div class="meta">Desde {{ c.checkin_em|hora }} · <span class="cronometro" data-desde="{{ c.checkin_em.isoformat() }}">0 min</span> · toque para o check-out</div></div></a>
+  {% endfor %}
+
+  <a class="cartao linha-item" href="{{ url_for('relatorio') }}" style="margin-top:12px">
+    <div class="ic" style="font-size:1.4rem">⏱</div>
+    <div class="meio"><b>{{ mes.minutos|horas }} atendidos em {{ mes.rotulo.split(' de ')[0] }}</b>
+      <div class="meta">{{ mes.atendimentos }} atendimentos · média de {{ mes.media }} min · ver relatório</div></div></a>
+
+  <div id="estoque" class="cartao {{ 'estoque baixo' if baixos }}" style="margin-top:12px;display:block">
+    <div class="linha-item"><div class="ic" style="font-size:1.4rem">🧪</div>
+      <div class="meio"><b>Testes toxicológicos</b>
+        {% if baixos %}<div class="aviso" style="color:var(--ambar);font-size:.9rem">Repor: {% for e in baixos %}{{ e.tipo }} ({{ e.quantidade }}){{ ', ' if not loop.last }}{% endfor %}</div>{% endif %}</div></div>
+    <div class="estoques">
+      {% for e in estoques %}
+      <form method="post" action="{{ url_for('estoque') }}" class="estoque-linha {{ 'baixo' if e.quantidade < e.minimo }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="tipo" value="{{ e.tipo }}">
+        <span>{{ e.tipo }}</span>
+        <span class="contador"><button name="acao" value="menos" aria-label="Diminuir {{ e.tipo }}">−</button><b class="qtd" aria-live="polite">{{ e.quantidade }}</b><button name="acao" value="mais" aria-label="Aumentar {{ e.tipo }}">+</button></span>
+      </form>
+      {% endfor %}
+    </div>
   </div>
   <details style="margin-top:6px">
-    <summary style="font-weight:500;color:var(--apagado);font-size:.92rem">Ajustar estoque e alerta</summary>
-    <form method="post" action="{{ url_for('estoque') }}" class="duas">
+    <summary style="font-weight:500;color:var(--apagado);font-size:.92rem">Ajustar quantidades e alertas</summary>
+    <form method="post" action="{{ url_for('estoque') }}">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="definir">
-      <div class="campo" style="margin-top:4px"><label for="qtd">Em estoque</label><input id="qtd" name="qtd" type="number" min="0" inputmode="numeric" value="{{ current_user.estoque_testes }}"></div>
-      <div class="campo" style="margin-top:4px"><label for="minimo">Avisar abaixo de</label><input id="minimo" name="minimo" type="number" min="0" inputmode="numeric" value="{{ current_user.estoque_minimo }}"></div>
-      <button class="btn sec" style="grid-column:1/-1;margin-top:10px">Salvar estoque</button>
+      {% for e in estoques %}
+      <div class="duas" style="align-items:end">
+        <div class="campo" style="margin-top:8px"><label for="qtd_{{ loop.index0 }}">{{ e.tipo }}: em estoque</label><input id="qtd_{{ loop.index0 }}" name="qtd_{{ loop.index0 }}" type="number" min="0" inputmode="numeric" value="{{ e.quantidade }}"></div>
+        <div class="campo" style="margin-top:8px"><label for="min_{{ loop.index0 }}">Avisar abaixo de</label><input id="min_{{ loop.index0 }}" name="min_{{ loop.index0 }}" type="number" min="0" inputmode="numeric" value="{{ e.minimo }}"></div>
+      </div>
+      {% endfor %}
+      <button class="btn bloco" style="margin-top:12px">Salvar estoque</button>
     </form>
   </details>
 
@@ -41,7 +57,7 @@
   {% endif %}
 
   <div class="secao"><h2>Sessões de hoje</h2><a href="{{ url_for('agenda') }}">Ver agenda</a></div>
-  {% for c in consultas %}{{ consulta_item(c) }}{% else %}
+  {% for c in consultas %}{{ consulta_item(c, url_for('painel')) }}{% else %}
   <div class="vazio">Nenhuma sessão agendada para hoje.<br><a class="btn sec peq" href="{{ url_for('consulta_form') }}">Agendar sessão</a></div>
   {% endfor %}
 

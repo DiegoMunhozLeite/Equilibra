@@ -12,6 +12,7 @@
   <div class="etiquetas" style="margin-top:0">
     <span class="tag {{ p.status }}">{{ STATUS_PACIENTE[p.status] }}</span>
     {% for s in p.lista_substancias %}<span class="tag">{{ s }}</span>{% endfor %}
+    {% if p.tipo_teste and p.tipo_teste != 'nenhum' %}<span class="tag azul">🧪 {{ p.tipo_teste }}</span>{% elif p.tipo_teste == 'nenhum' %}<span class="tag">Sem teste</span>{% else %}<a class="tag ambar" href="{{ url_for('paciente_form', pid=p.id) }}">Definir tipo de teste</a>{% endif %}
   </div>
 
   {% if motivos %}<div class="atencao" style="margin-top:16px"><h3>Em atenção</h3><ul>{% for m in motivos %}<li>{{ m }}</li>{% endfor %}</ul></div>{% endif %}
@@ -35,6 +36,17 @@
     <a class="btn sec" style="flex:1" href="{{ url_for('consulta_form', paciente=p.id) }}">Agendar sessão</a>
   </div>
   <a class="btn sec bloco" style="margin-top:10px" href="{{ url_for('fim_sessao', paciente=p.id) }}">🎙️ Gravar fim de sessão</a>
+  {% if e_demo %}
+  <form method="post" action="{{ url_for('ver_como_paciente', pid=p.id) }}" style="margin-top:10px">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <button class="btn sec bloco">👀 Ver como paciente (demo)</button>
+    <p class="meta" style="color:var(--apagado);font-size:.85rem;text-align:center;margin-top:6px">Mostra o app do jeito que {{ p.nome.split(' ·')[0] }} vê. Disponível só para pacientes de demonstração.</p>
+  </form>
+  {% endif %}
+  {% if ultimo_registro and ultimo_registro.realizada %}
+  <div class="secao"><h2>Última sessão</h2><a href="{{ url_for('registro_detalhe', rid=ultimo_registro.id) }}">{{ ultimo_registro.data|dia_curto }}</a></div>
+  <div class="cartao">{% set r = ultimo_registro %}{% include "terapeuta/_indicadores.html" %}</div>
+  {% endif %}
 
   <div class="secao" id="pagamentos"><h2>Pagamento</h2></div>
   <div class="cartao">

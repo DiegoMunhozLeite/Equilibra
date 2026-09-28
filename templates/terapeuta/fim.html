@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block conteudo %}
-<header class="topo"><div><h1>Fim de sessão</h1><div class="sub">Fale como foi. A IA transcreve, resume e preenche o registro.</div></div></header>
+<header class="topo"><div><h1>Fim de sessão</h1><div class="sub">Fale como foi. Você confere a transcrição, e a IA resume e preenche o registro.</div></div></header>
 <main class="pagina">
 {% if modo_avaliacao %}
   <div class="aviso-caixa" style="margin-bottom:12px">Modo avaliação: a gravação funciona, mas o áudio é descartado sem ser enviado, e a transcrição e o resumo são exemplos simulados. Nenhum crédito é usado.</div>
@@ -34,7 +34,7 @@
   <button type="button" id="botao" class="gravar" aria-live="polite"><span id="botao-txt">Gravar</span></button>
   <div id="tempo" class="tempo">00:00</div>
   <p id="estado" class="estado">Toque para começar. O áudio é apagado assim que vira texto.</p>
-  <button type="button" id="parar" class="btn bloco" hidden>Parar e gerar resumo</button>
+  <button type="button" id="parar" class="btn bloco" hidden>Parar e transcrever</button>
   <label class="btn sec bloco" id="enviar-arquivo" style="margin-top:10px">Enviar um áudio já gravado
     <input type="file" id="arquivo" accept="audio/*,.m4a,.mp3,.ogg,.opus,.wav,.webm" hidden></label>
   <p class="meta" style="color:var(--apagado);font-size:.88rem;text-align:center;margin-top:8px">Vale também para áudios do WhatsApp salvos em Arquivos. Mantenha a tela ligada e o app aberto durante a gravação.</p>
@@ -47,7 +47,7 @@
   <div class="avatar">{{ t.paciente.inicial }}</div>
   <div class="meio"><div class="nome">{{ t.paciente.nome }}</div>
     <div class="meta">{{ t.criado_em|data_br }} {{ t.criado_em|hora }} · {{ 'Sessão gravada' if t.tipo == 'consulta' else 'Relato' }} · {{ t.segundos // 60 }} min</div></div>
-  <span class="tag {{ 'vermelho' if t.status == 'erro' else 'ambar' if t.status == 'gravando' else 'azul' }}">{{ {'pronta':'Revisar','erro':'Com erro','gravando':'Incompleta'}[t.status] }}</span>
+  <span class="tag {{ 'vermelho' if t.status == 'erro' else 'ambar' if t.status == 'gravando' else 'azul' }}">{{ {'transcrita':'Conferir texto','pronta':'Revisar resumo','erro':'Com erro','gravando':'Incompleta'}[t.status] }}</span>
 </a>
 {% endfor %}
 {% endif %}
@@ -168,7 +168,7 @@
 
   function concluir() {
     encerrando = false;
-    estado.textContent = 'Gerando resumo com IA…';
+    estado.textContent = 'Abrindo a transcrição para você conferir…';
     post('/t/gravacao/' + gravacaoId + '/concluir').then(function (j) { location.href = j.url; })
       .catch(function (e) { estado.textContent = e.message; location.href = '/t/gravacao/' + gravacaoId; });
   }
