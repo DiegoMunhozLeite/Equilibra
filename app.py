@@ -94,7 +94,7 @@ def para_float(txt, padrao=None):
 
 
 # ============================================================ constantes
-VERSAO = "v6"  # aumente a cada entrega; aparece no rodapé do app
+VERSAO = "v7"  # aumente a cada entrega; aparece no rodapé do app
 HUMOR = {1: ("😞", "Muito mal"), 2: ("😔", "Mal"), 3: ("😐", "Regular"), 4: ("🙂", "Bem"), 5: ("😊", "Muito bem")}
 RISCO = {"baixo": "Baixo", "moderado": "Moderado", "alto": "Alto", "critico": "Crítico"}
 STATUS_PACIENTE = {"ativo": "Ativo", "pausado": "Pausado", "alta": "Alta", "inativo": "Inativo"}
@@ -1609,13 +1609,22 @@ def migrar_colunas():
 
 def iniciar_banco():
     with app.app_context():
-        db.create_all()
+        for tentativa in range(3):  # tolera outro processo criando as mesmas tabelas ao mesmo tempo
+            try:
+                db.create_all()
+                break
+            except Exception:
+                db.session.rollback()
+                import time
+                time.sleep(1 + tentativa)
         migrar_colunas()
         if Artigo.query.filter_by(autor_id=None).count() == 0:
             from conteudo_base import ARTIGOS
             for a in ARTIGOS:
                 db.session.add(Artigo(autor_id=None, **a))
             db.session.commit()
+        db.session.remove()
+        db.engine.dispose()  # com --preload, cada processo do servidor abre as próprias conexões
 
 
 iniciar_banco()

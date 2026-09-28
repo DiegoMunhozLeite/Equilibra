@@ -94,6 +94,7 @@ A versão em uso aparece no rodapé de todas as telas. Ela é definida em `VERSA
 | v4 | Modo avaliação: IA simulada, sem custo |
 | v5 | Visual branco, testes Multi 1 a 12 com estoque por tipo, 10 indicadores, revisão da transcrição com prova da IA, check-in e check-out, relatório mensal, ver como paciente |
 | v6 | Número da versão no rodapé do app |
+| v7 | Versões de bibliotecas travadas e inicialização segura do servidor (corrige falha de build) |
 
 ## Arquivos
 
