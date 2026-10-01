@@ -1,0 +1,97 @@
+{% extends "base.html" %}{% from "_itens.html" import consulta_item, registro_item  with context %}
+{% import "_icones.html" as ic %}
+{% block conteudo %}
+<header class="topo" style="align-items:center"><div>
+  <div class="data">{{ hoje|dia_longo }}</div>
+  <h1>{{ saudacao }}, {{ current_user.nome.split()[0] }}</h1>
+</div><a class="btn sec peq" href="{{ url_for('conta_terapeuta') }}" aria-label="Minha conta">{{ ic.engrenagem() }}</a></header>
+<main class="pagina">
+  <div class="numeros">
+    <div class="numero"><div class="ic" style="background:var(--primaria-clara)">🗓️</div><div><b>{{ consultas|length }}</b><span>Sessões hoje</span></div></div>
+    <a class="numero" href="{{ url_for('pacientes') }}" style="color:inherit"><div class="ic" style="background:var(--verde-claro)">🌿</div><div><b>{{ ativos }}</b><span>Pacientes ativos</span></div></a>
+    <a class="numero largo" href="{{ url_for('registros') }}" style="color:inherit"><div class="ic" style="background:var(--ambar-claro)">📋</div><div><b>{{ n_recentes }}</b><span>Registros nos últimos 7 dias</span></div></a>
+  </div>
+
+  {% for c in em_atendimento %}
+  <a class="atendendo" href="{{ url_for('agenda', dia=c.inicio.date().isoformat()) }}" style="margin-top:12px;color:inherit"><span class="ponto" aria-hidden="true"></span>
+    <div class="meio"><b>Em atendimento: {{ c.paciente.nome }}</b><div class="meta">Desde {{ c.checkin_em|hora }} · <span class="cronometro" data-desde="{{ c.checkin_em.isoformat() }}">0 min</span> · toque para o check-out</div></div></a>
+  {% endfor %}
+
+  <a class="cartao linha-item" href="{{ url_for('financeiro') }}" style="margin-top:12px">
+    <div class="ic" style="font-size:1.4rem">💰</div>
+    <div class="meio"><b>{{ fin[0]|moeda }} recebidos em {{ mes.rotulo.split(' de ')[0] }}</b>
+      <div class="meta">Despesas {{ fin[1]|moeda }}{% if a_receber %} · <span style="color:var(--ambar)">{{ a_receber|moeda }} a receber</span>{% endif %} · ver finanças</div></div></a>
+
+  <a class="cartao linha-item" href="{{ url_for('relatorio') }}" style="margin-top:12px">
+    <div class="ic" style="font-size:1.4rem">⏱</div>
+    <div class="meio"><b>{{ mes.minutos|horas }} atendidos em {{ mes.rotulo.split(' de ')[0] }}</b>
+      <div class="meta">{{ mes.atendimentos }} atendimentos · média de {{ mes.media }} min · ver relatório</div></div></a>
+
+  <div id="estoque" class="cartao {{ 'estoque baixo' if baixos }}" style="margin-top:12px;display:block">
+    <div class="linha-item"><div class="ic" style="font-size:1.4rem">🧪</div>
+      <div class="meio"><b>Testes toxicológicos</b>
+        {% if baixos %}<div class="aviso" style="color:var(--ambar);font-size:.9rem">Repor: {% for e in baixos %}{{ e.tipo }} ({{ e.quantidade }}){{ ', ' if not loop.last }}{% endfor %}</div>{% endif %}</div></div>
+    <div class="estoques">
+      {% for e in estoques %}
+      <form method="post" action="{{ url_for('estoque') }}" class="estoque-linha {{ 'baixo' if e.quantidade < e.minimo }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="tipo" value="{{ e.tipo }}">
+        <span>{{ e.tipo }}</span>
+        <span class="contador"><button name="acao" value="menos" aria-label="Diminuir {{ e.tipo }}">−</button><b class="qtd" aria-live="polite">{{ e.quantidade }}</b><button name="acao" value="mais" aria-label="Aumentar {{ e.tipo }}">+</button></span>
+      </form>
+      {% endfor %}
+    </div>
+  </div>
+  <details style="margin-top:6px">
+    <summary style="font-weight:500;color:var(--apagado);font-size:.92rem">Ajustar quantidades e alertas</summary>
+    <form method="post" action="{{ url_for('estoque') }}">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="definir">
+      {% for e in estoques %}
+      <div class="duas" style="align-items:end">
+        <div class="campo" style="margin-top:8px"><label for="qtd_{{ loop.index0 }}">{{ e.tipo }}: em estoque</label><input id="qtd_{{ loop.index0 }}" name="qtd_{{ loop.index0 }}" type="number" min="0" inputmode="numeric" value="{{ e.quantidade }}"></div>
+        <div class="campo" style="margin-top:8px"><label for="min_{{ loop.index0 }}">Avisar abaixo de</label><input id="min_{{ loop.index0 }}" name="min_{{ loop.index0 }}" type="number" min="0" inputmode="numeric" value="{{ e.minimo }}"></div>
+      </div>
+      {% endfor %}
+      <button class="btn bloco" style="margin-top:12px">Salvar estoque</button>
+    </form>
+  </details>
+
+  {% if atencao %}
+  <div class="secao"><h2>Pacientes em atenção</h2></div>
+  <div class="atencao"><ul>
+    {% for p, motivos in atencao %}<li><a href="{{ url_for('paciente_detalhe', pid=p.id) }}">{{ p.nome }}</a><small>{{ motivos|join('; ') }}</small></li>{% endfor %}
+  </ul></div>
+  {% endif %}
+
+  <div class="secao"><h2>Sessões de hoje</h2><a href="{{ url_for('agenda') }}">Ver agenda</a></div>
+  {% for c in consultas %}{{ consulta_item(c, url_for('painel')) }}{% else %}
+  <div class="vazio">Nenhuma sessão agendada para hoje.<br><a class="btn sec peq" href="{{ url_for('consulta_form') }}">Agendar sessão</a></div>
+  {% endfor %}
+
+  <div class="secao"><h2>Últimos registros</h2><a href="{{ url_for('registros') }}">Ver todos</a></div>
+  {% for r in recentes %}{{ registro_item(r) }}{% else %}
+  <div class="vazio">Os registros pós-sessão aparecem aqui.</div>
+  {% endfor %}
+
+  <div class="secao"><h2>Biblioteca</h2><a href="{{ url_for('biblioteca') }}">Abrir</a></div>
+  <a class="cartao" href="{{ url_for('biblioteca') }}">Conteúdos sobre substâncias, recuperação e práticas que seus pacientes também veem no app.</a>
+
+  {% if tem_demo %}
+  <div class="cartao" style="margin-top:28px">
+    <b>Dados de demonstração ativos</b>
+    <p class="meta" style="color:var(--apagado);margin:4px 0 12px">Pacientes marcados com “· demo” são fictícios. Apague antes de começar a usar com pacientes reais.</p>
+    <form method="post" action="{{ url_for('demo_apagar') }}" data-confirma="Apagar todos os pacientes fictícios e tudo ligado a eles? Seus dados reais não são afetados.">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn perigo">Apagar dados de demonstração</button></form>
+  </div>
+  {% elif total_pacientes == 0 %}
+  <div class="cartao" style="margin-top:28px;background:var(--primaria-clara);border-color:var(--primaria-media)">
+    <b>Quer ver o app funcionando?</b>
+    <p style="margin:4px 0 12px">Carregue pacientes fictícios com agenda, registros, check-ins, pagamentos, termo de exemplo e uma transcrição para revisar. Dá para apagar tudo depois com um toque.</p>
+    <form method="post" action="{{ url_for('demo_carregar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn bloco">Carregar dados de demonstração</button></form>
+  </div>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('sair') }}" style="margin-top:32px;text-align:center">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sec peq">Sair da conta</button>
+  </form>
+</main>
+{% endblock %}

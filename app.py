@@ -29,13 +29,14 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import voz
+from cripto import TextoCifrado, cifrar
 
 TZ = ZoneInfo("America/Sao_Paulo")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEV = os.environ.get("FLASK_ENV") == "development"
 
 app = Flask(__name__)
-app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 db_url = os.environ.get("DATABASE_URL", "sqlite:///" + os.path.join(BASE_DIR, "equilibra.db"))
 if db_url.startswith("postgres://"):
@@ -51,6 +52,7 @@ app.config.update(
     REMEMBER_COOKIE_DURATION=timedelta(days=30),
     REMEMBER_COOKIE_SECURE=not DEV,
     MAX_CONTENT_LENGTH=26 * 1024 * 1024,
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
 )
 
 db = SQLAlchemy(app)
@@ -94,7 +96,7 @@ def para_float(txt, padrao=None):
 
 
 # ============================================================ constantes
-VERSAO = "v7"  # aumente a cada entrega; aparece no rodapé do app
+VERSAO = "v8"  # aumente a cada entrega; aparece no rodapé do app
 HUMOR = {1: ("😞", "Muito mal"), 2: ("😔", "Mal"), 3: ("😐", "Regular"), 4: ("🙂", "Bem"), 5: ("😊", "Muito bem")}
 RISCO = {"baixo": "Baixo", "moderado": "Moderado", "alto": "Alto", "critico": "Crítico"}
 STATUS_PACIENTE = {"ativo": "Ativo", "pausado": "Pausado", "alta": "Alta", "inativo": "Inativo"}
@@ -138,6 +140,12 @@ class Terapeuta(UserMixin, db.Model):
     senha_hash = db.Column(db.String(256), nullable=False)
     estoque_testes = db.Column(db.Integer, default=0)
     estoque_minimo = db.Column(db.Integer, default=10)
+    registro_prof = db.Column(db.String(60))   # ex.: registro em associação profissional
+    cidade = db.Column(db.String(80))
+    telefone = db.Column(db.String(30))
+    totp_segredo = db.Column(TextoCifrado)
+    totp_ativo = db.Column(db.Boolean, default=False)
+    codigos_recuperacao = db.Column(db.Text)
     criado_em = db.Column(db.DateTime, default=agora)
     papel = "terapeuta"
 
@@ -163,7 +171,7 @@ class Paciente(UserMixin, db.Model):
     horario_pref = db.Column(db.String(80))
     emergencia_nome = db.Column(db.String(80))
     emergencia_tel = db.Column(db.String(30))
-    anamnese = db.Column(db.Text)
+    anamnese = db.Column(TextoCifrado)
     senha_hash = db.Column(db.String(256))
     codigo_convite = db.Column(db.String(40), unique=True)
     criado_em = db.Column(db.DateTime, default=agora)
@@ -223,7 +231,7 @@ class Consulta(db.Model):
     duracao = db.Column(db.Integer, default=50)
     tipo = db.Column(db.String(20), default="individual")
     status = db.Column(db.String(20), default="agendada")
-    notas_pre = db.Column(db.Text)
+    notas_pre = db.Column(TextoCifrado)
     checkin_em = db.Column(db.DateTime)    # início real do atendimento
     checkout_em = db.Column(db.DateTime)   # fim real do atendimento
     paciente = db.relationship("Paciente")
@@ -266,9 +274,9 @@ class Registro(db.Model):
     autoestima = db.Column(db.Integer)
     risco = db.Column(db.String(10), default="baixo")
     abordagens = db.Column(db.String(200))
-    comentarios = db.Column(db.Text)
+    comentarios = db.Column(TextoCifrado)
     tarefa_paciente = db.Column(db.String(300))
-    feedback_ia = db.Column(db.Text)
+    feedback_ia = db.Column(TextoCifrado)
     criado_em = db.Column(db.DateTime, default=agora)
     paciente = db.relationship("Paciente")
     consulta = db.relationship("Consulta", back_populates="registro")
@@ -283,7 +291,7 @@ class CheckIn(db.Model):
     sono = db.Column(db.Integer)
     usou = db.Column(db.Boolean, default=False)
     gatilhos = db.Column(db.String(300))
-    nota = db.Column(db.Text)
+    nota = db.Column(TextoCifrado)
     paciente = db.relationship("Paciente")
     __table_args__ = (db.UniqueConstraint("paciente_id", "data"),)
 
@@ -295,6 +303,8 @@ class Pagamento(db.Model):
     valor = db.Column(db.Float, nullable=False)
     sessoes = db.Column(db.Integer, default=1)
     nota = db.Column(db.String(200))
+    forma = db.Column(db.String(15))  # pix | dinheiro | cartao | transferencia | outro
+    paciente = db.relationship("Paciente")
 
 
 class Consentimento(db.Model):
@@ -320,12 +330,12 @@ class Transcricao(db.Model):
     registro_id = db.Column(db.Integer, db.ForeignKey("registro.id"))
     tipo = db.Column(db.String(10), nullable=False)  # resumo | consulta
     status = db.Column(db.String(12), default="gravando")  # gravando | transcrita | pronta | revisada | erro
-    texto = db.Column(db.Text, default="")
-    texto_original = db.Column(db.Text)  # transcrição como saiu, antes das correções do terapeuta
+    texto = db.Column(TextoCifrado, default="")
+    texto_original = db.Column(TextoCifrado)  # transcrição como saiu, antes das correções do terapeuta
     partes = db.Column(db.Integer, default=0)
     falhas = db.Column(db.Integer, default=0)
     segundos = db.Column(db.Integer, default=0)
-    sugestao = db.Column(db.Text)  # JSON gerado pela IA
+    sugestao = db.Column(TextoCifrado)  # JSON gerado pela IA
     erro = db.Column(db.String(300))
     criado_em = db.Column(db.DateTime, default=agora)
     paciente = db.relationship("Paciente")
@@ -405,6 +415,47 @@ def csrf_token():
     if "_csrf" not in session:
         session["_csrf"] = secrets.token_urlsafe(32)
     return session["_csrf"]
+
+
+INATIVIDADE_MIN = int(os.environ.get("INATIVIDADE_MIN", "60"))  # terapeuta sai sozinho após este tempo parado
+
+
+class Acesso(db.Model):
+    """Registro de quem abriu dados de um paciente (exigência de boa prática da LGPD)."""
+    id = db.Column(db.Integer, primary_key=True)
+    terapeuta_id = db.Column(db.Integer, db.ForeignKey("terapeuta.id"), index=True)
+    paciente_id = db.Column(db.Integer, index=True)
+    acao = db.Column(db.String(40), nullable=False)
+    quando = db.Column(db.DateTime, default=agora)
+    ip = db.Column(db.String(64))
+    aparelho = db.Column(db.String(120))
+
+
+def registrar_acesso(paciente_id, acao):
+    try:
+        ua = request.headers.get("User-Agent", "")
+        aparelho = "iPhone" if "iPhone" in ua else "iPad" if "iPad" in ua else "Android" if "Android" in ua else \
+                   "Mac" if "Macintosh" in ua else "Windows" if "Windows" in ua else (ua[:60] or "desconhecido")
+        db.session.add(Acesso(terapeuta_id=current_user.id if current_user.papel == "terapeuta" else None,
+                              paciente_id=paciente_id, acao=acao, ip=(request.remote_addr or "")[:64], aparelho=aparelho))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
+@app.before_request
+def controlar_inatividade():
+    if request.endpoint in ("static", "service_worker", "manifest") or not current_user.is_authenticated:
+        return
+    if current_user.papel == "terapeuta" and not session.get("demo_como"):
+        ultimo = session.get("ultimo_uso")
+        if ultimo and datetime.now().timestamp() - ultimo > INATIVIDADE_MIN * 60:
+            logout_user()
+            session.clear()
+            flash(f"Por segurança, você saiu após {INATIVIDADE_MIN} minutos sem uso. Entre de novo.", "aviso")
+            return redirect(url_for("entrar"))
+        session.permanent = True
+        session["ultimo_uso"] = datetime.now().timestamp()
 
 
 @app.before_request
@@ -625,7 +676,11 @@ def entrar():
         senha = request.form.get("senha", "")
         u = Terapeuta.query.filter_by(email=email).first() or Paciente.query.filter_by(email=email).first()
         if conferir_senha(u, senha) and (u.papel == "terapeuta" or u.status != "inativo"):
-            login_user(u, remember=True)
+            if u.papel == "terapeuta" and u.totp_ativo:
+                session["2fa_pendente"] = u.id
+                return redirect(url_for("entrar_codigo"))
+            login_user(u, remember=(u.papel == "paciente"))
+            session["ultimo_uso"] = datetime.now().timestamp()
             return redirect(url_for("inicio"))
         flash("E-mail ou senha incorretos.", "erro")
     return render_template("entrar.html")
@@ -677,7 +732,8 @@ def cadastro():
             definir_senha(t, f["senha"])
             db.session.add(t)
             db.session.commit()
-            login_user(t, remember=True)
+            login_user(t, remember=False)
+            session["ultimo_uso"] = datetime.now().timestamp()
             return redirect(url_for("painel"))
     return render_template("cadastro.html", exige_codigo=bool(codigo))
 
@@ -730,7 +786,9 @@ def painel():
                            ativos=len(ativos), recentes=recentes, n_recentes=n_recentes,
                            tem_demo=tem_demo, total_pacientes=total, estoques=lista_estoque,
                            baixos=[e for e in lista_estoque if e.quantidade < e.minimo and e.minimo > 0],
-                           em_atendimento=em_atendimento, mes=mes)
+                           em_atendimento=em_atendimento, mes=mes,
+                           fin=financeiro.totais_mes(current_user.id, hoje().year, hoje().month),
+                           a_receber=sum(x["a_receber"] for x in financeiro.situacao_pacientes(current_user.id)))
 
 
 @app.route("/t/demo/carregar", methods=["POST"])
@@ -841,6 +899,7 @@ def paciente_form(pid=None):
 @exige("terapeuta")
 def paciente_detalhe(pid):
     p = meu_paciente(pid)
+    registrar_acesso(p.id, "abriu a ficha")
     registros = Registro.query.filter_by(paciente_id=p.id).order_by(Registro.data.desc(), Registro.id.desc()).all()
     checkins = CheckIn.query.filter_by(paciente_id=p.id).order_by(CheckIn.data.desc()).limit(60).all()
     proximas = (Consulta.query.filter_by(paciente_id=p.id, status="agendada")
@@ -854,6 +913,9 @@ def paciente_detalhe(pid):
                            grafico=serie_diaria(pontos), saldo=p.saldo_sessoes(), link=link, motivos=alertas(p),
                            consentimento=consentimento_ativo(p),
                            e_demo=DemoItem.query.filter_by(terapeuta_id=current_user.id, tipo="paciente", ref_id=p.id).first() is not None,
+                           evolucao=relatorios.evolucao(p.id),
+                           link_senha=(session.pop("link_senha", None) or {}).get("url") if (session.get("link_senha") or {}).get("pid") == p.id else None,
+                           acessos=Acesso.query.filter_by(paciente_id=p.id).order_by(Acesso.quando.desc()).limit(8).all(),
                            ultimo_registro=registros[0] if registros else None)
 
 
@@ -941,8 +1003,18 @@ def consulta_form(cid=None):
                 if c.minutos_atendidos and c.status == "agendada":
                     c.status = "realizada"
             db.session.add(c)
+            repetir = request.form.get("repetir") if not cid else None
+            vezes = para_int(request.form.get("vezes"), 1, 1, 52)
+            criadas = 1
+            if repetir in ("semanal", "quinzenal") and vezes > 1:
+                passo = 7 if repetir == "semanal" else 14
+                for i in range(1, vezes):
+                    db.session.add(Consulta(terapeuta_id=current_user.id, paciente_id=c.paciente_id,
+                                            inicio=c.inicio + timedelta(days=passo * i), duracao=c.duracao,
+                                            tipo=c.tipo, status="agendada"))
+                    criadas += 1
             db.session.commit()
-            flash("Sessão salva.", "ok")
+            flash(f"{criadas} sessões agendadas." if criadas > 1 else "Sessão salva.", "ok")
             return redirect(url_for("agenda", dia=c.inicio.date().isoformat()))
     padrao = c.inicio or datetime.combine(para_data(request.args.get("dia")) or hoje(), datetime.min.time()).replace(hour=9)
     return render_template("terapeuta/consulta_form.html", c=c, pacientes=lista, padrao=padrao)
@@ -1083,7 +1155,8 @@ def demo_voltar():
     logout_user()
     if not t:
         return redirect(url_for("entrar"))
-    login_user(t, remember=True)
+    login_user(t, remember=False)
+    session["ultimo_uso"] = datetime.now().timestamp()
     return redirect(url_for("paciente_detalhe", pid=pid) if pid else url_for("painel"))
 
 
@@ -1189,6 +1262,7 @@ def registro_form(cid=None, pid=None, rid=None):
 @exige("terapeuta")
 def registro_detalhe(rid):
     r = meu_registro(rid)
+    registrar_acesso(r.paciente_id, "abriu registro de sessão")
     t = Transcricao.query.filter_by(registro_id=r.id).first()
     cons = db.session.get(Consulta, r.consulta_id) if r.consulta_id else None
     return render_template("terapeuta/registro.html", r=r, t=t, cons=cons)
@@ -1409,6 +1483,7 @@ def gravacao_resumir(tid):
 @exige("terapeuta")
 def gravacao_ver(tid):
     t = minha_transcricao(tid)
+    registrar_acesso(t.paciente_id, "abriu transcrição")
     if t.registro_id:
         return redirect(url_for("registro_detalhe", rid=t.registro_id))
     if t.consulta_id:
@@ -1607,6 +1682,24 @@ def migrar_colunas():
                 pass  # outro processo pode ter criado a coluna ao mesmo tempo
 
 
+CAMPOS_CIFRADOS = [("paciente", "anamnese"), ("consulta", "notas_pre"), ("registro", "comentarios"),
+                   ("registro", "feedback_ia"), ("check_in", "nota"), ("transcricao", "texto"),
+                   ("transcricao", "texto_original"), ("transcricao", "sugestao")]
+
+
+def criptografar_textos_antigos():
+    from sqlalchemy import text
+    for tabela, coluna in CAMPOS_CIFRADOS:
+        try:
+            linhas = db.session.execute(text(f'SELECT id, "{coluna}" FROM "{tabela}" WHERE "{coluna}" IS NOT NULL '
+                                             f'AND "{coluna}" NOT LIKE :p'), {"p": "enc1:%"}).fetchall()
+            for ident, valor in linhas:
+                db.session.execute(text(f'UPDATE "{tabela}" SET "{coluna}" = :v WHERE id = :i'), {"v": cifrar(valor), "i": ident})
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+
 def iniciar_banco():
     with app.app_context():
         for tentativa in range(3):  # tolera outro processo criando as mesmas tabelas ao mesmo tempo
@@ -1618,6 +1711,7 @@ def iniciar_banco():
                 import time
                 time.sleep(1 + tentativa)
         migrar_colunas()
+        criptografar_textos_antigos()
         if Artigo.query.filter_by(autor_id=None).count() == 0:
             from conteudo_base import ARTIGOS
             for a in ARTIGOS:
@@ -1626,6 +1720,12 @@ def iniciar_banco():
         db.session.remove()
         db.engine.dispose()  # com --preload, cada processo do servidor abre as próprias conexões
 
+
+import sys as _sys
+_sys.modules.setdefault("app", _sys.modules[__name__])  # permite "python app.py" e os módulos abaixo
+import financeiro  # noqa: E402,F401
+import conta  # noqa: E402,F401
+import relatorios  # noqa: E402,F401
 
 iniciar_banco()
 

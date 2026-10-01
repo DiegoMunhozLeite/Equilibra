@@ -1,0 +1,28 @@
+{% extends "base.html" %}{% block body_class %}sem-barra{% endblock %}
+{% block titulo %}Criar conta · Equilibra{% endblock %}
+{% block conteudo %}
+<main class="auth">
+  {% include "_marca.html" %}
+  <h1>Criar conta de terapeuta</h1>
+  <form method="post">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="campo"><label for="nome">Como quer ser chamado(a)</label>
+      <input id="nome" name="nome" type="text" autocomplete="given-name" required value="{{ request.form.nome }}"></div>
+    <div class="campo"><label for="email">E-mail</label>
+      <input id="email" name="email" type="email" autocomplete="username" autocapitalize="off" required value="{{ request.form.email }}"></div>
+    <div class="campo"><label for="senha">Senha</label>
+      <input id="senha" name="senha" type="password" autocomplete="new-password" minlength="8" required>
+      <div class="ajuda">Pelo menos 8 caracteres.</div></div>
+    <div class="campo"><label for="confirma">Confirme a senha</label>
+      <input id="confirma" name="confirma" type="password" autocomplete="new-password" minlength="8" required></div>
+    {% if exige_codigo %}
+    <div class="campo"><label for="codigo">Código de cadastro</label>
+      <input id="codigo" name="codigo" type="text" autocapitalize="off" required>
+      <div class="ajuda">Fornecido por quem administra este app.</div></div>
+    {% endif %}
+    <p class="meta" style="color:var(--apagado);font-size:.85rem;margin-top:16px">Ao criar a conta, você concorda com os <a href="{{ url_for('termos') }}">termos de uso</a> e a <a href="{{ url_for('privacidade') }}">política de privacidade</a>.</p>
+    <button class="btn bloco" style="margin-top:12px">Criar conta</button>
+  </form>
+  <p style="margin-top:24px"><a href="{{ url_for('entrar') }}">Já tenho conta</a></p>
+</main>
+{% endblock %}

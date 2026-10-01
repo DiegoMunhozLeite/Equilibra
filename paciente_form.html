@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div>
+  <a class="voltar" href="{{ url_for('paciente_detalhe', pid=p.id) if p.id else url_for('pacientes') }}">‹ Voltar</a>
+  <h1>{{ 'Editar paciente' if p.id else 'Novo paciente' }}</h1></div></header>
+<main class="pagina">
+<form method="post">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="campo"><label for="nome">Nome ou apelido *</label>
+    <input id="nome" name="nome" type="text" required value="{{ p.nome or '' }}" autocomplete="off">
+    <div class="ajuda">Se preferir mais privacidade, use só o primeiro nome ou um apelido.</div></div>
+  <div class="duas">
+    <div class="campo"><label for="nascimento">Nascimento</label><input id="nascimento" name="nascimento" type="date" value="{{ p.nascimento or '' }}"></div>
+    <div class="campo"><label for="telefone">Telefone</label><input id="telefone" name="telefone" type="tel" inputmode="tel" placeholder="(11) 99999-9999" value="{{ p.telefone or '' }}"></div>
+  </div>
+  <div class="campo"><label for="email">E-mail</label>
+    <input id="email" name="email" type="email" autocapitalize="off" placeholder="email@exemplo.com" value="{{ p.email or '' }}" {{ 'disabled' if p.tem_acesso }}>
+    {% if p.tem_acesso %}<div class="ajuda">O paciente já usa este e-mail para entrar no app.</div>{% endif %}</div>
+
+  <div class="campo"><span class="rot">Substâncias ou comportamentos</span>
+    <div class="escolhas">
+      {% set atuais = p.lista_substancias %}
+      {% for s in SUBSTANCIAS %}<label><input type="checkbox" name="substancias" value="{{ s }}" {{ 'checked' if s in atuais }}><span>{{ s }}</span></label>{% endfor %}
+    </div>
+    {% set outras = atuais|reject('in', SUBSTANCIAS)|list %}
+    <input name="substancia_outra" type="text" placeholder="Outra (descreva)" style="margin-top:10px" value="{{ outras|join(', ') }}">
+  </div>
+  <div class="campo"><label for="tipo_teste">Tipo de teste toxicológico *</label>
+    <select id="tipo_teste" name="tipo_teste" required>
+      <option value="">Escolha</option>
+      {% for t in TIPOS_TESTE %}<option value="{{ t }}" {{ 'selected' if p.tipo_teste == t }}>{{ t }}</option>{% endfor %}
+      <option value="nenhum" {{ 'selected' if p.tipo_teste == 'nenhum' }}>Não faz teste</option>
+    </select>
+    <div class="ajuda">Vem selecionado no registro pós-sessão e desconta do estoque desse tipo.</div></div>
+  <div class="duas">
+    <div class="campo"><label for="tempo_uso">Tempo de uso</label><input id="tempo_uso" name="tempo_uso" type="text" placeholder="Ex.: 5 anos" value="{{ p.tempo_uso or '' }}"></div>
+    <div class="campo"><label for="status">Status</label><select id="status" name="status">
+      {% for k, v in STATUS_PACIENTE.items() %}<option value="{{ k }}" {{ 'selected' if p.status == k }}>{{ v }}</option>{% endfor %}</select></div>
+  </div>
+  <div class="duas">
+    <div class="campo"><label for="inicio_tratamento">Início do tratamento</label><input id="inicio_tratamento" name="inicio_tratamento" type="date" value="{{ p.inicio_tratamento or '' }}"></div>
+    <div class="campo"><label for="ultimo_uso">Data do último uso</label><input id="ultimo_uso" name="ultimo_uso" type="date" max="{{ hoje }}" value="{{ p.ultimo_uso or '' }}"></div>
+  </div>
+  <p class="ajuda" style="color:var(--apagado);font-size:.88rem;margin-top:6px">O tempo sem uso e as conquistas são calculados a partir da data do último uso, e se atualizam sozinhos quando um uso é registrado.</p>
+
+  <div class="grupo"><h3>Sessões e pagamento</h3>
+    <div class="duas">
+      <div class="campo"><label for="sessoes_semana">Sessões por semana</label><input id="sessoes_semana" name="sessoes_semana" type="number" min="0" max="14" inputmode="numeric" value="{{ p.sessoes_semana or 1 }}"></div>
+      <div class="campo"><label for="valor_sessao">Valor por sessão (R$)</label><input id="valor_sessao" name="valor_sessao" type="text" inputmode="decimal" placeholder="150,00" value="{{ ('%.2f'|format(p.valor_sessao)).replace('.', ',') if p.valor_sessao else '' }}"></div>
+    </div>
+    <div class="campo"><label for="horario_pref">Horário preferencial</label><input id="horario_pref" name="horario_pref" type="text" placeholder="Ex.: terças às 14h" value="{{ p.horario_pref or '' }}"></div>
+  </div>
+
+  <div class="grupo"><h3>Contato de emergência</h3>
+    <div class="duas">
+      <div class="campo"><label for="emergencia_nome">Nome</label><input id="emergencia_nome" name="emergencia_nome" type="text" value="{{ p.emergencia_nome or '' }}"></div>
+      <div class="campo"><label for="emergencia_tel">Telefone</label><input id="emergencia_tel" name="emergencia_tel" type="tel" inputmode="tel" value="{{ p.emergencia_tel or '' }}"></div>
+    </div>
+  </div>
+
+  <div class="grupo"><h3>Anamnese</h3>
+    <div class="campo"><label for="anamnese" class="sr">Observações iniciais</label>
+      <textarea id="anamnese" name="anamnese" rows="6" placeholder="Histórico, contexto familiar, motivação para o tratamento">{{ p.anamnese or '' }}</textarea></div>
+  </div>
+
+  <div class="acoes">
+    <a class="btn sec" href="{{ url_for('paciente_detalhe', pid=p.id) if p.id else url_for('pacientes') }}">Cancelar</a>
+    <button class="btn">Salvar paciente</button>
+  </div>
+</form>
+</main>
+{% endblock %}

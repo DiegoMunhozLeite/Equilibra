@@ -96,6 +96,16 @@ SUGESTAO_EXEMPLO = {
 }
 
 
+def dia_do_mes(hoje, meses_atras, dia):
+    """Data no mês que fica meses_atras antes do atual; no mês atual, nunca depois de hoje."""
+    ano, mes = hoje.year, hoje.month - meses_atras
+    while mes < 1:
+        ano, mes = ano - 1, mes + 12
+    from datetime import date
+    alvo = date(ano, mes, min(dia, 28))
+    return min(alvo, hoje)
+
+
 def carregar(m, terapeuta):
     """m: módulo app (modelos, db, hoje, agora). Cria tudo e anota em DemoItem."""
     db, hoje, agora = m.db, m.hoje(), m.agora()
@@ -214,11 +224,27 @@ def carregar(m, terapeuta):
                                      nota="Dia difícil depois da festa." if usou else None))
 
     # pagamentos
-    for p, d in pacientes:
+    formas = ["pix", "pix", "cartao", "transferencia", "dinheiro", "pix"]
+    for i, (p, d) in enumerate(pacientes):
         if d["pacote"]:
             sess, valor = d["pacote"]
-            db.session.add(m.Pagamento(paciente_id=p.id, valor=valor, sessoes=sess,
-                                       data=hoje - timedelta(days=36), nota="Pacote · demo (Pix)"))
+            db.session.add(m.Pagamento(paciente_id=p.id, valor=valor, sessoes=sess, forma=formas[i],
+                                       data=hoje - timedelta(days=36), nota="Pacote · demo"))
+            if d["status"] == "ativo":  # histórico mensal para o gráfico do financeiro
+                for meses_atras in (0, 1, 2, 3):
+                    db.session.add(m.Pagamento(paciente_id=p.id, valor=d["valor_sessao"] * 4, sessoes=4 if meses_atras == 0 else 0,
+                                               forma=formas[i], data=dia_do_mes(hoje, meses_atras, 3 + i),
+                                               nota="Mensalidade · demo" if meses_atras == 0 else "Mensalidade anterior · demo (histórico)"))
+    from financeiro import Despesa
+    for meses_atras in (0, 1, 2, 3, 4, 5):
+        for dia, desc, cat, valor in [(1, "Sala de atendimento · demo", "sala", 900.0), (8, "Caixa de testes Multi 6 · demo", "testes", 380.0),
+                                      (15, "Supervisão clínica · demo", "formacao", 250.0), (20, "Óleos e florais · demo", "materiais", 160.0)]:
+            if meses_atras % 2 and cat == "materiais":
+                continue
+            desp = Despesa(terapeuta_id=terapeuta.id, data=dia_do_mes(hoje, meses_atras, dia), descricao=desc, categoria=cat,
+                           valor=valor + (meses_atras * 15 if cat == "testes" else 0))
+            db.session.add(desp)
+            anota("despesa", desp)
 
     # termos de consentimento de exemplo
     for p, d in pacientes:
@@ -254,16 +280,17 @@ def carregar(m, terapeuta):
 
 
 def apagar(m, terapeuta):
-    db = m.db
+    import conta
+    from financeiro import Despesa
     itens = m.DemoItem.query.filter_by(terapeuta_id=terapeuta.id).all()
     ids = [i.ref_id for i in itens if i.tipo == "paciente"]
-    if ids:
-        for modelo in (m.Transcricao, m.Registro, m.CheckIn, m.Pagamento, m.Consentimento, m.Consulta):
-            modelo.query.filter(modelo.paciente_id.in_(ids)).delete(synchronize_session=False)
-        m.Paciente.query.filter(m.Paciente.id.in_(ids), m.Paciente.terapeuta_id == terapeuta.id).delete(synchronize_session=False)
     arts = [i.ref_id for i in itens if i.tipo == "artigo"]
+    desp = [i.ref_id for i in itens if i.tipo == "despesa"]
+    n = conta.apagar_pacientes(ids, terapeuta.id)
     if arts:
         m.Artigo.query.filter(m.Artigo.id.in_(arts), m.Artigo.autor_id == terapeuta.id).delete(synchronize_session=False)
+    if desp:
+        Despesa.query.filter(Despesa.id.in_(desp), Despesa.terapeuta_id == terapeuta.id).delete(synchronize_session=False)
     m.DemoItem.query.filter_by(terapeuta_id=terapeuta.id).delete(synchronize_session=False)
-    db.session.commit()
-    return len(ids)
+    m.db.session.commit()
+    return n

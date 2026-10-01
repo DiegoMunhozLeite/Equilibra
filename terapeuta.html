@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div><a class="voltar" href="{{ url_for('painel') }}">‹ Início</a><h1>Minha conta</h1></div></header>
+<main class="pagina">
+  <div class="secao" style="margin-top:0"><h2>Perfil</h2></div>
+  <form method="post" class="cartao"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="perfil">
+    <div class="campo" style="margin-top:0"><label for="nome">Nome</label><input id="nome" name="nome" type="text" value="{{ current_user.nome }}" required></div>
+    <div class="campo"><label for="registro_prof">Registro profissional</label><input id="registro_prof" name="registro_prof" type="text" placeholder="Ex.: Terapeuta holístico · CRT 00000" value="{{ current_user.registro_prof or '' }}"></div>
+    <div class="duas">
+      <div class="campo"><label for="cidade">Cidade</label><input id="cidade" name="cidade" type="text" value="{{ current_user.cidade or '' }}"></div>
+      <div class="campo"><label for="telefone">Telefone</label><input id="telefone" name="telefone" type="tel" value="{{ current_user.telefone or '' }}"></div>
+    </div>
+    <p class="meta" style="color:var(--apagado);font-size:.85rem;margin-top:8px">Aparece nos recibos e relatórios.</p>
+    <button class="btn bloco" style="margin-top:10px">Salvar perfil</button></form>
+
+  <div class="secao" id="seguranca"><h2>Segurança</h2></div>
+  <div class="cartao">
+    <details><summary>Trocar senha</summary>
+      <form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="senha">
+        <div class="campo" style="margin-top:4px"><label for="atual">Senha atual</label><input id="atual" name="atual" type="password" autocomplete="current-password" required></div>
+        <div class="campo"><label for="senha">Nova senha</label><input id="senha" name="senha" type="password" autocomplete="new-password" minlength="8" required></div>
+        <div class="campo"><label for="confirma">Confirme</label><input id="confirma" name="confirma" type="password" autocomplete="new-password" minlength="8" required></div>
+        <button class="btn bloco" style="margin-top:12px">Trocar senha</button></form>
+    </details>
+    <div style="margin-top:8px">
+      <b>Verificação em duas etapas</b>
+      {% if current_user.totp_ativo %}
+        <p style="margin:6px 0"><span class="tag verde">Ativada</span> <span class="meta">{{ restantes }} códigos de recuperação restantes</span></p>
+        <details><summary>Desligar</summary>
+          <form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="2fa_desligar">
+            <div class="campo" style="margin-top:4px"><label for="atual2">Sua senha</label><input id="atual2" name="atual" type="password" required></div>
+            <button class="btn perigo">Desligar verificação</button></form></details>
+      {% elif qr %}
+        <ol style="padding-left:18px;margin:8px 0">
+          <li>No iPhone, abra o app <b>Senhas</b> (ou Google Authenticator, Microsoft Authenticator) e escaneie o código abaixo. Se estiver no próprio iPhone, toque em <a href="{{ qr.uri }}">adicionar ao autenticador</a>.</li>
+          <li>Digite o código de 6 dígitos que aparecer.</li></ol>
+        <div style="display:flex;justify-content:center;margin:10px 0">{{ qr.svg }}</div>
+        <p class="meta" style="text-align:center;word-break:break-all;color:var(--apagado)">Chave manual: {{ qr.segredo }}</p>
+        <form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="2fa_confirmar">
+          <div class="campo"><label for="codigo">Código de 6 dígitos</label><input id="codigo" name="codigo" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required></div>
+          <button class="btn bloco" style="margin-top:12px">Ativar</button></form>
+      {% else %}
+        <p class="meta" style="margin:6px 0 10px;color:var(--apagado)">Além da senha, pede um código do celular para entrar. Recomendado para quem guarda dados de saúde.</p>
+        <form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="2fa_iniciar"><button class="btn sec bloco">Ativar verificação em duas etapas</button></form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="secao"><h2>Seus dados</h2></div>
+  <div class="cartao">
+    <p style="margin:0 0 10px">Baixe uma cópia completa de tudo o que você guardou no Equilibra: pacientes, sessões, registros, check-ins, pagamentos e despesas.</p>
+    <a class="btn sec bloco" href="{{ url_for('exportar_tudo') }}">Baixar cópia dos meus dados</a>
+    <p class="meta" style="color:var(--apagado);font-size:.85rem;margin-top:8px">O arquivo contém dados de saúde. Guarde em local seguro.</p>
+  </div>
+
+  {% if acessos %}
+  <div class="secao"><h2>Acessos recentes a prontuários</h2></div>
+  <div class="cartao">{% for a in acessos %}<div class="lancamento"><div class="meio"><b>{{ nomes.get(a.paciente_id, 'Paciente excluído') }}</b><div class="meta">{{ a.acao }} · {{ a.aparelho }}</div></div><span class="meta">{{ a.quando|data_br }} {{ a.quando|hora }}</span></div>{% endfor %}</div>
+  {% endif %}
+
+  <p style="margin-top:24px;text-align:center"><a href="{{ url_for('termos') }}">Termos de uso</a> · <a href="{{ url_for('privacidade') }}">Política de privacidade</a></p>
+  <form method="post" action="{{ url_for('sair') }}" style="margin-top:12px;text-align:center"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sec peq">Sair da conta</button></form>
+</main>
+{% endblock %}

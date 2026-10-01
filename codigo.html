@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% block body_class %}sem-barra{% endblock %}
+{% block conteudo %}
+<main class="auth">{% include "_marca.html" %}
+  <h1>Código de verificação</h1>
+  <p style="color:var(--apagado);margin-top:6px">Abra seu app autenticador e digite o código de 6 dígitos do Equilibra.</p>
+  <form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="campo"><label for="codigo">Código</label><input id="codigo" name="codigo" type="text" inputmode="numeric" autocomplete="one-time-code" required autofocus maxlength="12"></div>
+    <button class="btn bloco" style="margin-top:20px">Entrar</button></form>
+  <p class="meta" style="color:var(--apagado);margin-top:20px">Perdeu o celular? Digite um dos códigos de recuperação que você guardou.</p>
+  <p><a href="{{ url_for('entrar') }}">Voltar</a></p>
+</main>
+{% endblock %}

@@ -46,6 +46,17 @@ Revise com um advogado. Itens que costumam ser pedidos pela LGPD para dados de s
 - Uma parte que falhar três vezes na transcrição é perdida (o áudio não é guardado para nova tentativa). O app avisa quando isso acontece.
 - Áudios do WhatsApp podem ser enviados pela opção "Enviar um áudio já gravado", depois de salvos em Arquivos.
 
+## Segurança e LGPD (v8)
+
+- **Criptografia:** anamnese, anotações e notas de sessão, feedback da IA, transcrições e notas dos check-ins ficam criptografados no banco. A chave vem de `CHAVE_DADOS` (criada automaticamente pelo `render.yaml`) e, como reserva, de `SECRET_KEY`. **Nunca apague nem troque essas duas variáveis no Render**: sem elas, os textos criptografados não podem mais ser lidos. Anote os valores num gerenciador de senhas.
+- **Saída por inatividade:** o terapeuta sai sozinho após `INATIVIDADE_MIN` minutos sem uso (padrão 60).
+- **Verificação em duas etapas:** opcional, em Minha conta. Usa o app Senhas do iPhone ou qualquer autenticador, com 8 códigos de recuperação.
+- **Recuperação de senha:** pacientes recebem um link gerado pelo terapeuta na ficha. Para envio por e-mail, preencha `SMTP_HOST`, `SMTP_PORTA`, `SMTP_USUARIO`, `SMTP_SENHA` e `EMAIL_REMETENTE` com os dados de um serviço de e-mail transacional ou de uma senha de app do seu provedor. Sem e-mail configurado, um administrador gera o link de um terapeuta no Shell do Render com `flask --app app link-senha email@do.terapeuta`.
+- **Registro de acessos:** cada abertura de ficha, registro, transcrição, relatório ou exportação fica anotada.
+- **Direitos do titular:** exportar e excluir todos os dados de um paciente na ficha dele; o paciente baixa uma cópia em Minha conta; o terapeuta baixa tudo em Minha conta.
+- **Termos e privacidade:** modelos em `/termos` e `/privacidade`. Revise com um advogado e preencha os campos entre colchetes antes de usar com pacientes reais.
+- **Backup:** confira no painel do banco no Render se o plano tem backups automáticos e como restaurá-los. Como reforço, baixe periodicamente a cópia completa em Minha conta.
+
 ## Demonstração para terapeutas
 
 - **Modo avaliação** (`MODO_AVALIACAO=1`, já ligado no `render.yaml`): nenhuma API paga é chamada; transcrição, resumo e feedback são exemplos simulados e identificados.
@@ -95,6 +106,7 @@ A versão em uso aparece no rodapé de todas as telas. Ela é definida em `VERSA
 | v5 | Visual branco, testes Multi 1 a 12 com estoque por tipo, 10 indicadores, revisão da transcrição com prova da IA, check-in e check-out, relatório mensal, ver como paciente |
 | v6 | Número da versão no rodapé do app |
 | v7 | Versões de bibliotecas travadas e inicialização segura do servidor (corrige falha de build) |
+| v8 | Área financeira, evolução dos indicadores, relatório em PDF, sessões recorrentes, recibos, criptografia dos dados clínicos, verificação em duas etapas, recuperação de senha, registro de acessos, saída por inatividade, exportação e exclusão de dados (LGPD), termos e privacidade |
 
 ## Arquivos
 
