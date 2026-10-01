@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div><a class="voltar" href="{{ url_for('conta_terapeuta') }}">‹ Minha conta</a><h1>Assinatura</h1>
+  <div class="sub">{{ a.nome_conta if a.e_clinica else 'Conta individual' }}</div></div></header>
+<main class="pagina">
+  <div class="cartao" style="background:var(--primaria-clara);border-color:var(--primaria-media)">
+    <div class="linha-item"><div class="meio"><span class="meta">Plano</span><h2>{{ a.plano.nome }}</h2></div>
+      <span class="tag {{ 'verde' if a.status in ['ativa','cortesia'] else 'azul' if a.status == 'teste' else 'ambar' if a.status == 'atrasada' else 'vermelho' }}">{{ STATUS_ASSINATURA[a.status] }}</span></div>
+    {% if a.status == 'teste' %}<p style="margin:10px 0 0">Teste grátis até <b>{{ a.teste_ate|data_br }}</b>{% if s.dias_teste is not none %} · faltam {{ s.dias_teste }} {{ 'dia' if s.dias_teste == 1 else 'dias' }}{% endif %}.</p>{% endif %}
+    {% if a.status in ['ativa','atrasada'] %}<p style="margin:10px 0 0">{{ a.valor_ciclo()|moeda }} por {{ 'ano' if a.ciclo == 'anual' else 'mês' }}{% if a.e_clinica %} · {{ a.assentos_cobrados }} terapeutas{% endif %}{% if a.proxima_cobranca %} · próxima cobrança em {{ a.proxima_cobranca|data_br }}{% endif %}</p>{% endif %}
+    {% if a.status == 'cortesia' %}<p style="margin:10px 0 0">Conta de cortesia: sem cobrança.</p>{% endif %}
+    {% if s.aviso %}<div class="aviso-caixa" style="margin-top:12px">{{ s.aviso }}</div>{% endif %}
+  </div>
+
+  {% if s.pendente and gestor %}
+  <div class="secao"><h2>Pagamento pendente</h2></div>
+  <form method="post" action="{{ url_for('pagar_cobranca', cid=s.pendente.id) }}" class="cartao">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <p style="margin:0 0 10px"><b>{{ s.pendente.valor|moeda }}</b> com vencimento em {{ s.pendente.vencimento|data_br }}.</p>
+    <div class="escolhas">{% for k, v in METODOS.items() %}<label><input type="radio" name="metodo" value="{{ k }}" {{ 'checked' if loop.first }}><span>{{ v }}</span></label>{% endfor %}</div>
+    <button class="btn bloco" style="margin-top:12px">Pagar agora (simulação)</button>
+    <p class="meta" style="color:var(--apagado);font-size:.82rem;margin-top:6px">Nesta versão o pagamento é simulado: nada é cobrado.</p>
+  </form>
+  {% endif %}
+
+  <div class="secao"><h2>Uso deste mês</h2></div>
+  <div class="cartao">
+    <div class="barra-ind"><span>Pacientes ativos</span><b class="meta" style="color:var(--primaria)">{{ u.pacientes }}{% if u.limite_pacientes %} de {{ u.limite_pacientes }}{% else %} · ilimitado{% endif %}</b>
+      {% if u.limite_pacientes %}<div class="trilho"><span style="width:{{ [u.pacientes * 100 / u.limite_pacientes, 100]|min }}%"></span></div>{% endif %}</div>
+    <div class="barra-ind"><span>Transcrição com IA</span><b class="meta" style="color:var(--primaria)">{{ u.minutos }} de {{ u.limite_minutos }} min</b>
+      <div class="trilho"><span style="width:{{ [u.minutos * 100 / (u.limite_minutos or 1), 100]|min }}%"></span></div></div>
+    {% if a.e_clinica %}<div class="barra-ind"><span>Terapeutas na clínica</span><b class="meta" style="color:var(--primaria)">{{ u.terapeutas }} de {{ a.assentos_cobrados }}</b></div>{% endif %}
+  </div>
+
+  {% if gestor %}
+  <div class="acoes" style="justify-content:stretch">
+    <a class="btn" style="flex:1" href="{{ url_for('contratar_plano') }}">{{ 'Mudar de plano' if a.status in ['ativa','atrasada'] else 'Assinar agora' }}</a>
+    <a class="btn sec" style="flex:1" href="{{ url_for('planos_publicos') }}">Comparar planos</a>
+  </div>
+  {% else %}<p class="meta" style="color:var(--apagado);margin-top:12px">A assinatura é gerenciada pelo administrador da clínica.</p>{% endif %}
+  {% if not a.e_clinica %}<a class="btn sec bloco" style="margin-top:10px" href="{{ url_for('minha_clinica') }}">Tem uma equipe? Transformar em conta de clínica</a>{% else %}<a class="btn sec bloco" style="margin-top:10px" href="{{ url_for('minha_clinica') }}">Ver a clínica</a>{% endif %}
+
+  {% if cobrancas %}
+  <div class="secao"><h2>Histórico de cobranças</h2></div>
+  <div class="cartao">{% for c in cobrancas %}<div class="lancamento"><div class="meio"><b>{{ c.valor|moeda }}</b><div class="meta">Vencimento {{ c.vencimento|data_br }}{% if c.pago_em %} · pago em {{ c.pago_em|data_br }} via {{ METODOS.get(c.metodo, 'Pix') }}{% endif %}{% if c.simulada %} · simulação{% endif %}</div></div>
+    <span class="tag {{ 'verde' if c.status == 'paga' else 'ambar' if c.status == 'pendente' else 'inativo' }}">{{ {'paga':'Paga','pendente':'Pendente','cancelada':'Cancelada'}[c.status] }}</span></div>{% endfor %}</div>
+  {% endif %}
+
+  {% if gestor and a.status in ['ativa','atrasada','teste'] %}
+  <details style="margin-top:20px"><summary style="color:var(--vermelho)">Cancelar assinatura</summary>
+    <form method="post" action="{{ url_for('cancelar_assinatura') }}" data-confirma="Cancelar a assinatura? Novos cadastros e gravações ficam pausados, mas seus dados continuam guardados.">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><p>Seus dados continuam guardados e podem ser exportados a qualquer momento.</p><button class="btn perigo">Cancelar assinatura</button></form></details>
+  {% endif %}
+</main>
+{% endblock %}

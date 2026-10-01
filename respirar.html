@@ -8,7 +8,7 @@
 </main>
 {% endblock %}
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function () {
   var c = document.getElementById('circulo'), f = document.getElementById('fase'), n = document.getElementById('conta'), b = document.getElementById('iniciar');
   var passos = [['Inspire', 4, 'cheio'], ['Segure', 4, 'cheio'], ['Solte devagar', 6, 'expira']], ativo = false, t = null;

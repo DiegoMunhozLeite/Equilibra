@@ -1,6 +1,6 @@
 // Guarda em cache só arquivos estáticos. Páginas com dados de pacientes nunca ficam salvas no aparelho.
-const VERSAO = 'equilibra-v5';
-const ESTATICOS = ['/static/style.css?v=5', '/static/icon-192.png', '/offline'];
+const VERSAO = 'equilibra-v7';
+const ESTATICOS = ['/static/style.css?v=7', '/static/app.js?v=1', '/static/icon-192.png', '/offline'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSAO).then(c => c.addAll(ESTATICOS)).then(() => self.skipWaiting()));

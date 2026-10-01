@@ -97,9 +97,9 @@ def para_float(txt, padrao=None):
 
 
 # ============================================================ constantes
-VERSAO = "v8.2"
+VERSAO = "v9.2"
 # Arquivos que precisam estar na mesma pasta do app.py. Se faltar algum, o painel avisa.
-ARQUIVOS_ESSENCIAIS = ['_icones.html', '_itens.html', '_marca.html', 'ajuda.html', 'app.py', 'apple-touch-icon.png', 'artigo.html', 'base.html', 'biblioteca.html', 'c_codigo.html', 'c_codigos.html', 'c_esqueci.html', 'c_paciente.html', 'c_privacidade.html', 'c_redefinir.html', 'c_terapeuta.html', 'c_termos.html', 'cadastro.html', 'conta.py', 'conteudo_base.py', 'convite.html', 'cripto.py', 'demo.py', 'entrar.html', 'erro.html', 'financeiro.py', 'icon-192.png', 'icon-512.png', 'manifest.webmanifest', 'offline.html', 'p_casa.html', 'p_checkin.html', 'p_diario.html', 'relatorios.py', 'respirar.html', 'style.css', 'sw.js', 't__indicadores.html', 't_agenda.html', 't_artigo_form.html', 't_consulta_form.html', 't_fim.html', 't_financeiro.html', 't_gravacao.html', 't_mood.html', 't_paciente.html', 't_paciente_form.html', 't_pacientes.html', 't_painel.html', 't_recibo.html', 't_registro.html', 't_registro_form.html', 't_registros.html', 't_relatorio.html', 't_relatorio_opcoes.html', 't_relatorio_paciente.html', 'voz.py']
+ARQUIVOS_ESSENCIAIS = ['_icones.html', '_itens.html', '_marca.html', 'a_admin.html', 'a_conta.html', 'a_planos.html', 'a_simulador.html', 'ajuda.html', 'app.js', 'app.py', 'apple-touch-icon.png', 'artigo.html', 'base.html', 'biblioteca.html', 'c_codigo.html', 'c_codigos.html', 'c_esqueci.html', 'c_paciente.html', 'c_privacidade.html', 'c_redefinir.html', 'c_terapeuta.html', 'c_termos.html', 'cadastro.html', 'conta.py', 'conteudo_base.py', 'convite.html', 'cripto.py', 'demo.py', 'entrar.html', 'erro.html', 'financeiro.py', 'icon-192.png', 'icon-512.png', 'licenca.py', 'manifest.webmanifest', 'offline.html', 'p_casa.html', 'p_checkin.html', 'p_diario.html', 'planos.html', 'plataforma.py', 'relatorios.py', 'respirar.html', 'style.css', 'sw.js', 't__indicadores.html', 't_agenda.html', 't_artigo_form.html', 't_assinatura.html', 't_clinica.html', 't_consulta_form.html', 't_contratar.html', 't_fim.html', 't_financeiro.html', 't_gravacao.html', 't_mood.html', 't_paciente.html', 't_paciente_form.html', 't_pacientes.html', 't_painel.html', 't_recibo.html', 't_registro.html', 't_registro_form.html', 't_registros.html', 't_relatorio.html', 't_relatorio_opcoes.html', 't_relatorio_paciente.html', 'voz.py']
 
 
 def arquivos_faltando():
@@ -153,6 +153,9 @@ class Terapeuta(UserMixin, db.Model):
     totp_segredo = db.Column(TextoCifrado)
     totp_ativo = db.Column(db.Boolean, default=False)
     codigos_recuperacao = db.Column(db.Text)
+    clinica_id = db.Column(db.Integer, index=True)       # preenchido quando o terapeuta faz parte de uma clínica
+    papel_clinica = db.Column(db.String(10))            # admin | membro
+    demo_plataforma = db.Column(db.Boolean, default=False)  # conta fictícia do painel da plataforma
     criado_em = db.Column(db.DateTime, default=agora)
     papel = "terapeuta"
 
@@ -662,7 +665,7 @@ def service_worker():
     return resp
 
 
-EXTENSOES_PUBLICAS = {".css", ".png", ".svg", ".ico", ".webmanifest"}
+EXTENSOES_PUBLICAS = {".css", ".js", ".png", ".svg", ".ico", ".webmanifest"}
 
 
 @app.route("/static/<path:filename>", endpoint="static")
@@ -737,7 +740,11 @@ def validar_credenciais(email, senha, confirma, exceto=None):
 
 @app.route("/cadastro", methods=["GET", "POST"])
 def cadastro():
+    import licenca
     codigo = os.environ.get("CODIGO_CADASTRO")
+    convite_clinica = licenca.ler_convite_clinica(request.values.get("clinica", ""))
+    if convite_clinica:
+        codigo = None  # convite de uma clínica dispensa o código de cadastro
     if request.method == "POST":
         f = request.form
         email = f.get("email", "").strip().lower()
@@ -746,6 +753,8 @@ def cadastro():
             erro = "Informe seu nome."
         if codigo and not secrets.compare_digest(f.get("codigo", ""), codigo):
             erro = "Código de cadastro inválido."
+        if not convite_clinica and f.get("tipo_conta") == "clinica" and not f.get("nome_clinica", "").strip():
+            erro = "Informe o nome da clínica."
         if erro:
             flash(erro, "erro")
         else:
@@ -753,10 +762,12 @@ def cadastro():
             definir_senha(t, f["senha"])
             db.session.add(t)
             db.session.commit()
+            licenca.apos_cadastro(t, f, convite_clinica)
             login_user(t, remember=False)
             session["ultimo_uso"] = datetime.now().timestamp()
             return redirect(url_for("painel"))
-    return render_template("cadastro.html", exige_codigo=bool(codigo))
+    return render_template("cadastro.html", exige_codigo=bool(codigo), convite_clinica=convite_clinica,
+                           planos=licenca.planos_ativos(), plano_escolhido=request.values.get("plano", ""))
 
 
 @app.route("/convite/<codigo>", methods=["GET", "POST"])
@@ -1733,6 +1744,10 @@ def iniciar_banco():
                 time.sleep(1 + tentativa)
         migrar_colunas()
         criptografar_textos_antigos()
+        import licenca
+        licenca.semear_planos()
+        import plataforma
+        plataforma.criar_indices()
         if Artigo.query.filter_by(autor_id=None).count() == 0:
             from conteudo_base import ARTIGOS
             for a in ARTIGOS:
@@ -1747,6 +1762,8 @@ _sys.modules.setdefault("app", _sys.modules[__name__])  # permite "python app.py
 import financeiro  # noqa: E402,F401
 import conta  # noqa: E402,F401
 import relatorios  # noqa: E402,F401
+import licenca  # noqa: E402,F401
+import plataforma  # noqa: E402,F401
 
 iniciar_banco()
 

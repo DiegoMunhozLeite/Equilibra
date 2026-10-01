@@ -4,10 +4,10 @@
 <main class="pagina">
   <nav class="filtros" aria-label="Seções"><a href="{{ url_for('registros') }}">Registros</a><a class="ativo" href="{{ url_for('mood') }}">Mood</a></nav>
   <form method="get" class="duas" style="margin-bottom:16px">
-    <select name="dias" aria-label="Período" onchange="this.form.submit()">
+    <select name="dias" aria-label="Período" data-auto-enviar>
       {% for d, rot in [(7,'Últimos 7 dias'),(30,'Últimos 30 dias'),(90,'Últimos 90 dias')] %}<option value="{{ d }}" {{ 'selected' if periodo == d }}>{{ rot }}</option>{% endfor %}
     </select>
-    <select name="paciente" aria-label="Paciente" onchange="this.form.submit()">
+    <select name="paciente" aria-label="Paciente" data-auto-enviar>
       <option value="">Todos os pacientes</option>
       {% for p in pacientes %}<option value="{{ p.id }}" {{ 'selected' if pid == p.id }}>{{ p.nome }}</option>{% endfor %}
     </select>

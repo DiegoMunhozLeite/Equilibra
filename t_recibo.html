@@ -2,7 +2,7 @@
 {% block titulo %}Recibo · {{ pg.paciente.nome }}{% endblock %}
 {% block conteudo %}
 <div class="so-tela pagina" style="padding-top:16px"><a class="voltar" href="{{ url_for('financeiro', mes=pg.data.strftime('%Y-%m')) }}">‹ Finanças</a>
-  <div class="acoes" style="justify-content:stretch;margin-top:8px"><button class="btn" style="flex:1" onclick="window.print()">Salvar em PDF ou imprimir</button></div>
+  <div class="acoes" style="justify-content:stretch;margin-top:8px"><button class="btn" style="flex:1" data-imprimir>Salvar em PDF ou imprimir</button></div>
   <p class="meta" style="color:var(--apagado);font-size:.85rem">No iPhone: toque no botão, depois em Compartilhar, e escolha Salvar em Arquivos ou envie pelo WhatsApp.</p></div>
 <article class="documento">
   <div class="cabecalho"><div><h1>Recibo</h1><div class="meta">Nº {{ '%05d'|format(pg.id) }}</div></div>

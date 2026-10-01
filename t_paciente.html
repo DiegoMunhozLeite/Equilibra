@@ -184,7 +184,7 @@
 </main>
 {% endblock %}
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce() }}">
 var b = document.getElementById('compartilhar');
 if (b) b.addEventListener('click', function () {
   var url = document.getElementById('link').value;

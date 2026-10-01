@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% import "_icones.html" as ic %}
+{% block conteudo %}
+<header class="topo"><div><a class="voltar" href="{{ url_for('minha_assinatura') }}">‹ Assinatura</a><h1>{{ c.nome if c else 'Conta de clínica' }}</h1>
+  {% if c %}<div class="sub">{{ 'Você administra esta clínica' if current_user.papel_clinica == 'admin' else 'Você faz parte desta clínica' }}</div>{% endif %}</div></header>
+<main class="pagina">
+{% if not c %}
+  <div class="cartao">
+    <p style="margin:0 0 10px">Numa conta de clínica, vários terapeutas usam o Equilibra numa assinatura só. Cada terapeuta vê apenas os próprios pacientes; você vê os números da equipe, sem acesso aos prontuários.</p>
+    <form method="post" action="{{ url_for('criar_clinica') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <div class="campo" style="margin-top:0"><label for="nome">Nome da clínica</label><input id="nome" name="nome" type="text" required></div>
+      <button class="btn bloco" style="margin-top:12px">Criar conta de clínica</button></form>
+    <p class="meta" style="color:var(--apagado);font-size:.85rem;margin-top:8px">Seus pacientes continuam com você. A assinatura passa para o plano Clínica, cobrado por terapeuta.</p>
+  </div>
+{% else %}
+  <div class="numeros">
+    <div class="numero"><div class="ic" aria-hidden="true">{{ ic.pessoas() }}</div><div><b>{{ equipe|length }}</b><span>Terapeutas</span></div></div>
+    <div class="numero"><div class="ic" aria-hidden="true">{{ ic.folha() }}</div><div><b>{{ equipe|sum(attribute='pacientes') }}</b><span>Pacientes ativos</span></div></div>
+    <div class="numero"><div class="ic" aria-hidden="true">{{ ic.agenda() }}</div><div><b>{{ equipe|sum(attribute='sessoes') }}</b><span>Sessões no mês</span></div></div>
+    <div class="numero"><div class="ic" aria-hidden="true">{{ ic.microfone() }}</div><div><b>{{ equipe|sum(attribute='minutos') }} min</b><span>IA no mês</span></div></div>
+  </div>
+  <div class="secao"><h2>Equipe</h2><span class="meta">{{ equipe|length }} de {{ a.assentos_cobrados }} lugares</span></div>
+  <div class="cartao">
+    {% for m in equipe %}
+    <div class="lancamento"><div class="avatar" style="width:38px;height:38px;font-size:1rem">{{ m.t.nome[0] }}</div>
+      <div class="meio"><b>{{ m.t.nome }}</b>{% if m.t.papel_clinica == 'admin' %} <span class="tag azul">admin</span>{% endif %}
+        <div class="meta">{{ m.pacientes }} pacientes ativos · {{ m.sessoes }} sessões no mês · {{ m.minutos }} min de IA</div></div>
+      {% if current_user.papel_clinica == 'admin' and m.t.id != current_user.id %}
+      <form method="post" action="{{ url_for('remover_da_clinica', tid=m.t.id) }}" data-confirma="Remover {{ m.t.nome }} da clínica? Os pacientes dela continuam com ela, numa conta própria."><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="mini-btn">Remover</button></form>
+      {% endif %}</div>
+    {% endfor %}
+  </div>
+  {% if link %}
+  <div class="secao"><h2>Convidar terapeuta</h2></div>
+  <div class="cartao">
+    <p style="margin:0">Envie este link. A pessoa cria a conta dela e entra direto na clínica.</p>
+    <div class="link-copiar"><input id="link" type="text" readonly value="{{ link }}"><button class="btn peq" type="button" id="compartilhar">Enviar</button></div>
+    <form method="post" action="{{ url_for('novo_convite_clinica') }}" style="margin-top:8px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="mini-btn" style="padding-left:0">Gerar novo link (o atual deixa de valer)</button></form>
+  </div>
+  {% endif %}
+  <p class="meta" style="color:var(--apagado);font-size:.85rem;margin-top:12px">Por privacidade, o painel da clínica mostra só números. Os prontuários de cada paciente continuam visíveis apenas para o terapeuta responsável.</p>
+{% endif %}
+</main>
+{% endblock %}
+{% block scripts %}
+<script nonce="{{ csp_nonce() }}">
+var b = document.getElementById('compartilhar');
+if (b) b.addEventListener('click', function () { var url = document.getElementById('link').value;
+  if (navigator.share) navigator.share({ title: 'Equilibra', text: 'Convite para a equipe no Equilibra: ', url: url }).catch(function(){});
+  else navigator.clipboard.writeText(url).then(function () { b.textContent = 'Copiado'; }); });
+</script>
+{% endblock %}

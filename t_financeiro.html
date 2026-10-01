@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_icones.html" as ic %}
 {% block conteudo %}
 <header class="topo"><div><h1>Finanças</h1><div class="sub">Recebimentos, despesas e pacotes</div></div>
   <a class="btn sec peq" href="{{ url_for('financeiro_exportar', mes='%d-%02d'|format(ano, mes)) }}">Exportar</a></header>
@@ -10,11 +11,11 @@
   </div>
 
   <div class="numeros">
-    <div class="numero fin-numero"><div class="ic" style="background:var(--primaria-clara)">⬇</div><div><b>{{ recebido|moeda }}</b><span>Recebido</span></div></div>
-    <div class="numero fin-numero"><div class="ic" style="background:var(--vermelho-claro)">⬆</div><div><b>{{ gastos|moeda }}</b><span>Despesas</span></div></div>
-    <div class="numero fin-numero largo"><div class="ic" style="background:var(--primaria-clara)">=</div><div><b class="{{ 'positivo' if resultado >= 0 else 'negativo' }}">{{ resultado|moeda }}</b><span>Resultado do mês</span></div></div>
-    <div class="numero fin-numero"><div class="ic" style="background:var(--ambar-claro)">⏳</div><div><b>{{ a_receber|moeda }}</b><span>A receber hoje</span></div></div>
-    <div class="numero fin-numero"><div class="ic" style="background:var(--primaria-clara)">🗓️</div><div><b>{{ previsto|moeda }}</b><span>{{ agendadas }} sessões ainda agendadas</span></div></div>
+    <div class="numero fin-numero"><div class="ic" aria-hidden="true">{{ ic.entrada() }}</div><div><b>{{ recebido|moeda }}</b><span>Recebido</span></div></div>
+    <div class="numero fin-numero"><div class="ic alerta" aria-hidden="true">{{ ic.saida() }}</div><div><b>{{ gastos|moeda }}</b><span>Despesas</span></div></div>
+    <div class="numero fin-numero largo"><div class="ic" aria-hidden="true">{{ ic.balanca() }}</div><div><b class="{{ 'positivo' if resultado >= 0 else 'negativo' }}">{{ resultado|moeda }}</b><span>Resultado do mês</span></div></div>
+    <div class="numero fin-numero"><div class="ic aviso" aria-hidden="true">{{ ic.ampulheta() }}</div><div><b>{{ a_receber|moeda }}</b><span>A receber hoje</span></div></div>
+    <div class="numero fin-numero"><div class="ic" aria-hidden="true">{{ ic.agenda() }}</div><div><b>{{ previsto|moeda }}</b><span>{{ agendadas }} sessões ainda agendadas</span></div></div>
   </div>
 
   {% if devendo or acabando %}
@@ -110,7 +111,7 @@
 </main>
 {% endblock %}
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce() }}">
 var sel = document.getElementById('pg-paciente'), val = document.getElementById('pg-valor');
 if (sel) sel.addEventListener('change', function () { var v = sel.selectedOptions[0].dataset.valor; if (v && !val.value) val.value = v; });
 </script>

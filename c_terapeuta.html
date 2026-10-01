@@ -13,6 +13,16 @@
     <p class="meta" style="color:var(--apagado);font-size:.85rem;margin-top:8px">Aparece nos recibos e relatórios.</p>
     <button class="btn bloco" style="margin-top:10px">Salvar perfil</button></form>
 
+  <div class="secao"><h2>Assinatura</h2></div>
+  <div class="cartao">
+    {% if licenca %}<p style="margin:0 0 10px">Plano <b>{{ licenca.a.plano.nome }}</b> · {{ STATUS_ASSINATURA[licenca.a.status] }}{% if licenca.a.e_clinica %} · {{ licenca.a.nome_conta }}{% endif %}</p>{% endif %}
+    <div class="acoes" style="margin-top:0;justify-content:stretch">
+      <a class="btn sec" style="flex:1" href="{{ url_for('minha_assinatura') }}">Ver assinatura</a>
+      <a class="btn sec" style="flex:1" href="{{ url_for('minha_clinica') }}">{{ 'Minha clínica' if current_user.clinica_id else 'Conta de clínica' }}</a>
+    </div>
+    {% if e_admin %}<a class="btn bloco" style="margin-top:10px" href="{{ url_for('admin_painel') }}">📊 Painel da plataforma</a>{% endif %}
+  </div>
+
   <div class="secao" id="seguranca"><h2>Segurança</h2></div>
   <div class="cartao">
     <details><summary>Trocar senha</summary>

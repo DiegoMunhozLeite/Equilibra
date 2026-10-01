@@ -54,7 +54,7 @@
 </main>
 {% endblock %}
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function () {
   var CSRF = {{ csrf_token()|tojson }};
   var CONSENTIDOS = {{ consentidos|list|tojson }};

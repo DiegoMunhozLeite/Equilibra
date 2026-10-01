@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_icones.html" as ic %}
 {% block conteudo %}
 <header class="topo"><div><a class="voltar" href="{{ url_for('agenda') }}">‹ Agenda</a>
   <h1>Tempo de atendimento</h1><div class="sub">Calculado pelo check-in e check-out das sessões</div></div></header>
@@ -10,10 +11,10 @@
   </div>
 
   <div class="numeros">
-    <div class="numero"><div class="ic" style="background:var(--primaria-clara)">⏱</div><div><b>{{ r.minutos|horas }}</b><span>Tempo total</span></div></div>
-    <div class="numero"><div class="ic" style="background:var(--primaria-clara)">🗓️</div><div><b>{{ r.atendimentos }}</b><span>Atendimentos</span></div></div>
-    <div class="numero"><div class="ic" style="background:var(--primaria-clara)">≈</div><div><b>{{ r.media }} min</b><span>Média por sessão</span></div></div>
-    <div class="numero"><div class="ic" style="background:var(--primaria-clara)">🕐</div><div><b>{{ r.atraso_medio|abs }} min</b><span>{{ 'Atraso médio' if r.atraso_medio >= 0 else 'Adiantado em média' }}</span></div></div>
+    <div class="numero"><div class="ic" aria-hidden="true">{{ ic.relogio() }}</div><div><b>{{ r.minutos|horas }}</b><span>Tempo total</span></div></div>
+    <div class="numero"><div class="ic" aria-hidden="true">{{ ic.agenda() }}</div><div><b>{{ r.atendimentos }}</b><span>Atendimentos</span></div></div>
+    <div class="numero"><div class="ic" aria-hidden="true">{{ ic.media() }}</div><div><b>{{ r.media }} min</b><span>Média por sessão</span></div></div>
+    <div class="numero"><div class="ic" aria-hidden="true">{{ ic.relogio() }}</div><div><b>{{ r.atraso_medio|abs }} min</b><span>{{ 'Atraso médio' if r.atraso_medio >= 0 else 'Adiantado em média' }}</span></div></div>
   </div>
   {% set dif = r.minutos - anterior.minutos %}
   <p class="comparativo" style="margin-top:10px">

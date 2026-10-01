@@ -14,10 +14,8 @@
 <link rel="manifest" href="{{ url_for('manifest') }}">
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
 <link rel="icon" href="{{ url_for('static', filename='icon-192.png') }}">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=5">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=7">
+<script src="{{ url_for('static', filename='app.js') }}?v=1" defer></script>
 </head>
 {% import "_icones.html" as ic %}
 {% set sem_barra = self.body_class()|trim == 'sem-barra' %}
@@ -25,60 +23,56 @@
 {% if vendo_como and current_user.is_authenticated and current_user.papel == 'paciente' %}<div class="faixa-demo" role="note"><span>👀 Você está vendo o app como <b>{{ current_user.nome }}</b></span>
   <form method="post" action="{{ url_for('demo_voltar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn peq">Voltar ao terapeuta</button></form></div>{% endif %}
 {% if faltando %}<div class="msg erro" style="margin:12px 16px" role="alert"><b>Atualização incompleta:</b> {{ faltando|length }} {{ 'arquivo não chegou' if faltando|length == 1 else 'arquivos não chegaram' }} ao servidor ({{ faltando[:6]|join(', ') }}{{ '…' if faltando|length > 6 }}). Envie de novo todos os arquivos do zip para a página inicial do repositório.</div>{% endif %}
+{% if licenca and licenca.aviso and request.endpoint not in ['minha_assinatura','contratar_plano'] %}<a class="faixa-avaliacao" href="{{ url_for('minha_assinatura') }}" style="display:block;background:{{ 'var(--ambar-claro)' if licenca.pode else 'var(--vermelho-claro)' }};color:{{ 'var(--ambar)' if licenca.pode else 'var(--vermelho)' }}">{{ licenca.aviso }} Ver assinatura ›</a>{% endif %}
 {% if modo_avaliacao %}<div class="faixa-avaliacao" role="note">Versão de avaliação · IA simulada, sem custo · não cadastre pacientes reais</div>{% endif %}
+<div class="ptr" aria-hidden="true"><span></span></div>
 {% with msgs = get_flashed_messages(with_categories=true) %}
-{% if msgs %}<div class="mensagens" role="status">{% for cat, m in msgs %}<div class="msg {{ cat }}">{{ m }}</div>{% endfor %}</div>{% endif %}
+{% if msgs %}<div class="toasts" role="status" aria-live="polite">{% for cat, m in msgs %}<div class="toast {{ cat }}"><span>{{ m }}</span><button type="button" class="toast-x" aria-label="Fechar aviso">×</button></div>{% endfor %}</div>{% endif %}
 {% endwith %}
 {% block conteudo %}{% endblock %}
 <p class="versao">Equilibra {{ VERSAO }} · <a href="{{ url_for('termos') }}">Termos</a> · <a href="{{ url_for('privacidade') }}">Privacidade</a></p>
 {% if current_user.is_authenticated and not sem_barra %}
 {% set ep = request.endpoint %}
+{% set em_mais = ep in ['registros','registro_form','registro_detalhe','mood','financeiro','relatorio','biblioteca','artigo','artigo_form','conta_terapeuta','minha_assinatura','contratar_plano','minha_clinica','admin_painel','admin_conta','admin_planos','admin_simulador'] %}
 <div class="barra"><nav aria-label="Navegação principal">
 {% if current_user.papel == 'terapeuta' %}
-  <a href="{{ url_for('painel') }}" class="{{ 'ativo' if ep == 'painel' }}">{{ ic.inicio() }}Início</a>
-  <a href="{{ url_for('agenda') }}" class="{{ 'ativo' if ep in ['agenda','consulta_form'] }}">{{ ic.agenda() }}Agenda</a>
-  <a href="{{ url_for('fim_sessao') }}" class="{{ 'ativo' if ep in ['fim_sessao','gravacao_ver'] }}">{{ ic.microfone() }}Fim sessão</a>
-  <a href="{{ url_for('pacientes') }}" class="{{ 'ativo' if ep in ['pacientes','paciente_detalhe','paciente_form'] }}">{{ ic.pessoas() }}Pacientes</a>
-  <a href="{{ url_for('registros') }}" class="{{ 'ativo' if ep in ['registros','registro_form','registro_detalhe','mood'] }}">{{ ic.prancheta() }}Registros</a>
-  <a href="{{ url_for('financeiro') }}" class="{{ 'ativo' if ep in ['financeiro'] }}">{{ ic.dinheiro() }}Finanças</a>
+  <a href="{{ url_for('painel') }}" class="{{ 'ativo' if ep == 'painel' }}" {{ 'aria-current=page' if ep == 'painel' }}>{{ ic.inicio() }}<span>Início</span></a>
+  <a href="{{ url_for('agenda') }}" class="{{ 'ativo' if ep in ['agenda','consulta_form'] }}">{{ ic.agenda() }}<span>Agenda</span></a>
+  <a href="{{ url_for('fim_sessao') }}" class="central {{ 'ativo' if ep in ['fim_sessao','gravacao_ver'] }}" aria-label="Gravar fim de sessão">{{ ic.microfone() }}<span>Gravar</span></a>
+  <a href="{{ url_for('pacientes') }}" class="{{ 'ativo' if ep in ['pacientes','paciente_detalhe','paciente_form','relatorio_paciente'] }}">{{ ic.pessoas() }}<span>Pacientes</span></a>
+  <button type="button" class="{{ 'ativo' if em_mais }}" data-abrir-mais aria-haspopup="dialog">{{ ic.mais() }}<span>Mais</span></button>
 {% else %}
-  <a href="{{ url_for('casa') }}" class="{{ 'ativo' if ep == 'casa' }}">{{ ic.inicio() }}Início</a>
-  <a href="{{ url_for('checkin') }}" class="{{ 'ativo' if ep == 'checkin' }}">{{ ic.rosto() }}Check-in</a>
-  <a href="{{ url_for('diario') }}" class="{{ 'ativo' if ep == 'diario' }}">{{ ic.agenda() }}Diário</a>
-  <a href="{{ url_for('biblioteca') }}" class="{{ 'ativo' if ep in ['biblioteca','artigo'] }}">{{ ic.livro() }}Aprender</a>
-  <a href="{{ url_for('ajuda') }}" class="{{ 'ativo' if ep in ['ajuda','respirar'] }}">{{ ic.coracao() }}Ajuda</a>
+  <a href="{{ url_for('casa') }}" class="{{ 'ativo' if ep == 'casa' }}">{{ ic.inicio() }}<span>Início</span></a>
+  <a href="{{ url_for('checkin') }}" class="{{ 'ativo' if ep == 'checkin' }}">{{ ic.rosto() }}<span>Check-in</span></a>
+  <a href="{{ url_for('diario') }}" class="{{ 'ativo' if ep == 'diario' }}">{{ ic.agenda() }}<span>Diário</span></a>
+  <a href="{{ url_for('biblioteca') }}" class="{{ 'ativo' if ep in ['biblioteca','artigo'] }}">{{ ic.livro() }}<span>Aprender</span></a>
+  <a href="{{ url_for('ajuda') }}" class="{{ 'ativo' if ep in ['ajuda','respirar'] }}">{{ ic.coracao() }}<span>Ajuda</span></a>
 {% endif %}
 </nav></div>
+{% if current_user.papel == 'terapeuta' %}
+<dialog id="folha-mais" class="folha" aria-label="Mais opções">
+  <div class="folha-alca" aria-hidden="true"></div>
+  <div class="folha-topo"><b>Mais</b><button type="button" class="icone-btn" data-fechar aria-label="Fechar">{{ ic.fechar() }}</button></div>
+  <div class="folha-grade">
+    <a href="{{ url_for('registros') }}">{{ ic.prancheta() }}<span>Registros</span></a>
+    <a href="{{ url_for('financeiro') }}">{{ ic.dinheiro() }}<span>Finanças</span></a>
+    <a href="{{ url_for('mood') }}">{{ ic.rosto() }}<span>Mood</span></a>
+    <a href="{{ url_for('relatorio') }}">{{ ic.relogio() }}<span>Tempo atendido</span></a>
+    <a href="{{ url_for('biblioteca') }}">{{ ic.livro() }}<span>Biblioteca</span></a>
+    <a href="{{ url_for('minha_assinatura') }}">{{ ic.chave() }}<span>Assinatura</span></a>
+    <a href="{{ url_for('minha_clinica') }}">{{ ic.clinica() }}<span>Clínica</span></a>
+    <a href="{{ url_for('conta_terapeuta') }}">{{ ic.engrenagem() }}<span>Minha conta</span></a>
+    {% if e_admin %}<a href="{{ url_for('admin_painel') }}" class="destaque">{{ ic.grafico() }}<span>Plataforma</span></a>{% endif %}
+  </div>
+</dialog>
 {% endif %}
-<script>
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
-document.querySelectorAll('input[type=range]').forEach(function (r) {
-  var out = document.getElementById(r.id + '-v');
-  function upd() { r.style.setProperty('--p', (r.value - r.min) / (r.max - r.min) * 100 + '%'); if (out) out.textContent = r.value + '/10'; }
-  r.addEventListener('input', upd); upd();
-});
-document.querySelectorAll('[data-mostra]').forEach(function (t) {
-  var alvo = document.getElementById(t.dataset.mostra);
-  function upd() { alvo.hidden = !t.checked; }
-  t.addEventListener('change', upd); upd();
-});
-document.querySelectorAll('[data-indicador]').forEach(function (box) {
-  var faixa = box.querySelector('input[type=range]'), oculto = box.querySelector('input[type=hidden]');
-  var valor = box.querySelector('[data-valor]'), limpar = box.querySelector('[data-limpar]');
-  function marcar() { oculto.value = faixa.value; box.classList.add('avaliado'); valor.textContent = faixa.value + '/10'; valor.classList.remove('vazio'); limpar.hidden = false; }
-  faixa.addEventListener('input', marcar);
-  faixa.addEventListener('change', marcar);
-  limpar.addEventListener('click', function () { oculto.value = ''; box.classList.remove('avaliado'); valor.textContent = 'não avaliado'; valor.classList.add('vazio'); limpar.hidden = true; });
-});
-document.querySelectorAll('.cronometro[data-desde]').forEach(function (el) {
-  var desde = new Date(el.dataset.desde);
-  function upd() { var m = Math.max(0, Math.floor((Date.now() - desde.getTime()) / 60000)); el.textContent = m < 60 ? m + ' min' : Math.floor(m / 60) + 'h' + String(m % 60).padStart(2, '0'); }
-  upd(); setInterval(upd, 30000);
-});
-document.querySelectorAll('[data-confirma]').forEach(function (f) {
-  f.addEventListener('submit', function (e) { if (!confirm(f.dataset.confirma)) e.preventDefault(); });
-});
-</script>
+{% endif %}
+<dialog id="dlg-confirma" class="dialogo" aria-labelledby="dlg-texto">
+  <form method="dialog" data-livre>
+    <p id="dlg-texto"></p>
+    <div class="dialogo-acoes"><button class="btn sec" value="nao">Cancelar</button><button class="btn perigo-solido" value="sim">Confirmar</button></div>
+  </form>
+</dialog>
 {% block scripts %}{% endblock %}
 </body>
 </html>

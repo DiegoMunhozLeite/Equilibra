@@ -43,7 +43,7 @@
     {% if d %}<details class="cartao"><summary>Transcrição revisada (editar gera um novo resumo)</summary>{% endif %}
     <div class="campo" style="margin-top:{{ '8px' if d else '0' }}"><label for="texto">Transcrição</label>
       <textarea id="texto" name="texto" rows="14" style="font-size:.97rem">{{ t.texto }}</textarea>
-      {% if t.texto_original and t.texto_original.strip() != t.texto.strip() %}<div class="ajuda">Você fez correções. <a href="#original" onclick="document.getElementById('original').open=true">Ver versão original</a></div>{% endif %}</div>
+      {% if t.texto_original and t.texto_original.strip() != t.texto.strip() %}<div class="ajuda">Você fez correções. <a href="#original" data-abrir="original">Ver versão original</a></div>{% endif %}</div>
     <div class="acoes" style="margin-top:12px">
       <button class="btn sec" name="gerar" value="0">Salvar correções</button>
       {% if ia_ativa %}<button class="btn" name="gerar" value="1">{{ 'Salvar e gerar novo resumo' if d else 'Passo 2: gerar resumo' }}</button>

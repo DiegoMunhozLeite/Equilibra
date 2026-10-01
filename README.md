@@ -46,6 +46,25 @@ Revise com um advogado. Itens que costumam ser pedidos pela LGPD para dados de s
 - Uma parte que falhar três vezes na transcrição é perdida (o áudio não é guardado para nova tentativa). O app avisa quando isso acontece.
 - Áudios do WhatsApp podem ser enviados pela opção "Enviar um áudio já gravado", depois de salvos em Arquivos.
 
+## Engenharia (v9.2)
+
+- **Segurança de borda:** Content-Security-Policy com nonce por requisição (nenhum script embutido sem autorização), HSTS, Permissions-Policy (microfone só no próprio app) e isolamento de origem.
+- **Limite de tentativas** guardado no banco, válido para todos os processos: login, código de verificação, cadastro, convite e recuperação de senha.
+- **Observabilidade:** cada requisição gera uma linha de log com identificador, rota, status e tempo. O identificador aparece no cabeçalho `X-Request-Id` e na tela de erro, para achar o problema nos Logs do Render.
+- **Saúde:** `/saude` responde se o app e o banco estão de pé; o Render usa esse endereço para só trocar de versão quando a nova estiver saudável.
+- **Desempenho e privacidade:** fonte do próprio sistema (sem Google Fonts, sem envio do IP do usuário a terceiros), JavaScript comum em `app.js` com cache, índices nas consultas mais frequentes.
+- **Próximos passos recomendados:** migrações versionadas de banco, fila para transcrições longas, testes automáticos a cada envio e monitoramento de erros.
+
+## Licenças e revenda (v9)
+
+- **Quem administra:** coloque no Render, em `ADMIN_EMAILS`, os e-mails de quem cuida da plataforma, separados por vírgula. Essas contas não pagam (cortesia) e veem o **Painel da plataforma** no Início.
+- **Planos:** três planos de exemplo (Essencial, Profissional e Clínica), editáveis em Painel da plataforma › Planos e preços. A página pública fica em `/planos`.
+- **Teste grátis:** toda conta nova começa com `DIAS_TESTE` dias (padrão 14), sem cartão.
+- **Limites:** pacientes ativos e minutos de transcrição por mês, conforme o plano. Com o teste encerrado ou pagamento atrasado há mais de 7 dias, ficam pausados só novos pacientes, novas sessões e gravações. Consultar, registrar sessões, exportar dados e o app do paciente continuam funcionando.
+- **Clínicas:** uma assinatura para a equipe, cobrada por terapeuta. O administrador convida por link e vê só números da equipe, sem acesso aos prontuários.
+- **Cobrança simulada:** nesta versão nenhum valor é cobrado e nenhum dado de cartão é pedido. Para cobrar de verdade, integre um serviço de pagamentos com página de pagamento hospedada por ele e emissão de nota fiscal.
+- **Abrir para o público:** enquanto `CODIGO_CADASTRO` estiver preenchido, só quem tem o código cria conta (convites de clínica dispensam o código). Apague essa variável quando quiser liberar o cadastro pela página de planos.
+
 ## Segurança e LGPD (v8)
 
 - **Criptografia:** anamnese, anotações e notas de sessão, feedback da IA, transcrições e notas dos check-ins ficam criptografados no banco. A chave vem de `CHAVE_DADOS` (criada automaticamente pelo `render.yaml`) e, como reserva, de `SECRET_KEY`. **Nunca apague nem troque essas duas variáveis no Render**: sem elas, os textos criptografados não podem mais ser lidos. Anote os valores num gerenciador de senhas.
@@ -106,6 +125,8 @@ A versão em uso aparece no rodapé de todas as telas. Ela é definida em `VERSA
 | v5 | Visual branco, testes Multi 1 a 12 com estoque por tipo, 10 indicadores, revisão da transcrição com prova da IA, check-in e check-out, relatório mensal, ver como paciente |
 | v6 | Número da versão no rodapé do app |
 | v7 | Versões de bibliotecas travadas e inicialização segura do servidor (corrige falha de build) |
+| v9.2 | Revisão de engenharia: CSP com nonce, HSTS, limite de tentativas, log estruturado, erro 500 amigável, verificação de saúde, índices no banco; visual com fonte do sistema, navegação flutuante de 5 abas com painel Mais, avisos flutuantes, confirmação no estilo do app, trava contra envio duplo, puxar para atualizar e transições entre telas |
+| v9 | Licenças e revenda: planos, teste grátis, assinatura (cobrança simulada), limites por plano, contas de clínica com equipe, painel da plataforma e simulador de receita |
 | v8.2 | Todos os arquivos numa pasta só (o envio pelo GitHub não desmonta mais a estrutura) e aviso de arquivo faltando |
 | v8 | Área financeira, evolução dos indicadores, relatório em PDF, sessões recorrentes, recibos, criptografia dos dados clínicos, verificação em duas etapas, recuperação de senha, registro de acessos, saída por inatividade, exportação e exclusão de dados (LGPD), termos e privacidade |
 
