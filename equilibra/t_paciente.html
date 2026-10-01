@@ -1,0 +1,196 @@
+{% extends "base.html" %}{% from "_itens.html" import registro_item, grafico as mini_grafico  with context %}
+{% block conteudo %}
+<header class="topo" style="align-items:center">
+  <div class="linha-item" style="flex:1;min-width:0">
+    <div class="avatar">{{ p.inicial }}</div>
+    <div class="meio"><a class="voltar" style="margin:0" href="{{ url_for('pacientes') }}">‹ Pacientes</a>
+      <h1 style="font-size:1.6rem">{{ p.nome }}</h1></div>
+  </div>
+  <a class="btn sec peq" href="{{ url_for('paciente_form', pid=p.id) }}">Editar</a>
+</header>
+<main class="pagina">
+  <div class="etiquetas" style="margin-top:0">
+    <span class="tag {{ p.status }}">{{ STATUS_PACIENTE[p.status] }}</span>
+    {% for s in p.lista_substancias %}<span class="tag">{{ s }}</span>{% endfor %}
+    {% if p.tipo_teste and p.tipo_teste != 'nenhum' %}<span class="tag azul">🧪 {{ p.tipo_teste }}</span>{% elif p.tipo_teste == 'nenhum' %}<span class="tag">Sem teste</span>{% else %}<a class="tag ambar" href="{{ url_for('paciente_form', pid=p.id) }}">Definir tipo de teste</a>{% endif %}
+  </div>
+
+  {% if motivos %}<div class="atencao" style="margin-top:16px"><h3>Em atenção</h3><ul>{% for m in motivos %}<li>{{ m }}</li>{% endfor %}</ul></div>{% endif %}
+
+  <section class="limpo" style="margin-top:16px">
+    {% if p.dias_limpo is not none %}
+      <div class="rotulo">Tempo sem uso</div>
+      <div class="dias">{{ p.dias_limpo }}</div>
+      <div class="dias-sub">{{ 'dia' if p.dias_limpo == 1 else 'dias' }}{% if p.dias_limpo >= 30 %} · {{ p.dias_limpo|tempo }}{% endif %}</div>
+      {% if prox %}<div class="prox"><span>Próxima conquista em</span><b>{{ prox[0] }} {{ 'dia' if prox[0] == 1 else 'dias' }}: {{ prox[1] }}</b></div>{% endif %}
+      {% if feitas %}<div class="medalhas" aria-label="Conquistas">{% for m in feitas %}<span class="medalha">🏅 {{ m }}</span>{% endfor %}</div>{% endif %}
+    {% else %}
+      <div class="rotulo">Tempo sem uso</div>
+      <p style="margin:10px 0 0">Informe a data do último uso para acompanhar o tempo sem uso e as conquistas.</p>
+      <a class="btn sec peq" href="{{ url_for('paciente_form', pid=p.id) }}" style="margin-top:10px">Informar data</a>
+    {% endif %}
+  </section>
+
+  <div class="acoes" style="justify-content:stretch">
+    <a class="btn" style="flex:1" href="{{ url_for('registro_form', pid=p.id) }}">Novo registro</a>
+    <a class="btn sec" style="flex:1" href="{{ url_for('consulta_form', paciente=p.id) }}">Agendar sessão</a>
+  </div>
+  <a class="btn sec bloco" style="margin-top:10px" href="{{ url_for('fim_sessao', paciente=p.id) }}">🎙️ Gravar fim de sessão</a>
+  <a class="btn sec bloco" style="margin-top:10px" href="{{ url_for('relatorio_paciente', pid=p.id) }}">📄 Relatório de evolução (PDF)</a>
+  {% if e_demo %}
+  <form method="post" action="{{ url_for('ver_como_paciente', pid=p.id) }}" style="margin-top:10px">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <button class="btn sec bloco">👀 Ver como paciente (demo)</button>
+    <p class="meta" style="color:var(--apagado);font-size:.85rem;text-align:center;margin-top:6px">Mostra o app do jeito que {{ p.nome.split(' ·')[0] }} vê. Disponível só para pacientes de demonstração.</p>
+  </form>
+  {% endif %}
+  {% if ultimo_registro and ultimo_registro.realizada %}
+  <div class="secao"><h2>Última sessão</h2><a href="{{ url_for('registro_detalhe', rid=ultimo_registro.id) }}">{{ ultimo_registro.data|dia_curto }}</a></div>
+  <div class="cartao">{% set r = ultimo_registro %}{% include "t__indicadores.html" %}</div>
+  {% endif %}
+
+  <div class="secao" id="pagamentos"><h2>Pagamento</h2></div>
+  <div class="cartao">
+    <div class="linha-item">
+      <div class="meio">
+        {% if saldo >= 0 %}<b style="color:var(--verde)">Pagamento em dia</b>{% else %}<b style="color:var(--vermelho)">{{ -saldo }} {{ 'sessão' if saldo == -1 else 'sessões' }} a receber</b>{% endif %}
+        <div class="meta">{% if saldo > 0 %}{{ saldo }} {{ 'sessão disponível' if saldo == 1 else 'sessões disponíveis' }}{% elif saldo == 0 %}Nenhuma sessão em crédito{% endif %}{% if p.valor_sessao %} · {{ p.valor_sessao|moeda }}/sessão{% endif %}</div>
+        <div class="meta">{{ p.sessoes_semana or 0 }}x por semana{% if p.horario_pref %} · {{ p.horario_pref }}{% endif %}</div>
+      </div>
+    </div>
+    <details style="margin-top:8px"><summary>+ Registrar pagamento</summary>
+      <form method="post" action="{{ url_for('novo_pagamento', pid=p.id) }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="duas">
+          <div class="campo" style="margin-top:4px"><label for="valor">Valor (R$)</label><input id="valor" name="valor" type="text" inputmode="decimal" required value="{{ ('%.2f'|format(p.valor_sessao)).replace('.', ',') if p.valor_sessao else '' }}"></div>
+          <div class="campo" style="margin-top:4px"><label for="sessoes">Sessões pagas</label><input id="sessoes" name="sessoes" type="number" min="0" inputmode="numeric" value="1"></div>
+        </div>
+        <div class="duas">
+          <div class="campo"><label for="data_pg">Data</label><input id="data_pg" name="data" type="date" value="{{ hoje }}"></div>
+          <div class="campo"><label for="nota_pg">Observação</label><input id="nota_pg" name="nota" type="text" placeholder="Pix, pacote…"></div>
+        </div>
+        <button class="btn bloco" style="margin-top:14px">Registrar pagamento</button>
+      </form>
+    </details>
+    {% if pagamentos %}<details><summary>Histórico</summary>
+      {% for pg in pagamentos %}<div class="linha-item" style="padding:6px 0"><div class="meio">{{ pg.data|data_br }}{% if pg.nota %} · {{ pg.nota }}{% endif %}</div><span>{{ pg.valor|moeda }} · {{ pg.sessoes }}s</span></div>{% endfor %}
+    </details>{% endif %}
+  </div>
+
+  {% if proximas %}
+  <div class="secao"><h2>Próximas sessões</h2></div>
+  {% for c in proximas %}<a class="cartao linha-item" href="{{ url_for('consulta_form', cid=c.id) }}"><div class="meio"><b>{{ c.inicio.date()|dia_curto }}, {{ c.inicio|hora }}</b><div class="meta">{{ TIPO_CONSULTA[c.tipo] }} · {{ c.duracao }} min</div></div></a>{% endfor %}
+  {% endif %}
+
+  {% if evolucao %}
+  <div class="secao"><h2>Evolução dos indicadores</h2><span class="meta">últimas {{ evolucao[0].pontos|length if evolucao|length == 1 else 'sessões' }}</span></div>
+  <div class="cartao evolucao">
+    {% for e in evolucao %}
+    <div class="evo">
+      <div><b style="font-weight:600">{{ e.rotulo }}</b><div class="meta" style="color:var(--apagado)">{{ e.primeiro }} → {{ e.ultimo }} · média {{ e.media }}</div></div>
+      <svg viewBox="-3 -3 106 36" preserveAspectRatio="none" aria-hidden="true"><polyline points="{{ e.linha }}" fill="none" stroke="#7AB8E8" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>
+      <span class="seta {{ e.direcao }}">{{ {'melhorou':'▲ melhorou','piorou':'▼ piorou','estavel':'● estável'}[e.direcao] }}</span>
+    </div>
+    {% endfor %}
+    <p class="meta" style="margin:0;color:var(--apagado);font-size:.82rem">Compara a primeira e a última sessão em que cada indicador foi avaliado, considerando se mais alto é melhor ou pior.</p>
+  </div>
+  {% endif %}
+
+  <div class="secao"><h2>Fissura</h2></div>
+  <div class="cartao">{% if grafico %}{{ mini_grafico(grafico) }}<p class="meta" style="margin:8px 0 0;color:var(--apagado)">Média diária entre check-ins do paciente e registros de sessão (0 a 10).</p>{% else %}<p class="meta" style="margin:0;color:var(--apagado)">Sem dados de fissura nos últimos 30 dias.</p>{% endif %}</div>
+
+  {% if checkins %}
+  <div class="secao"><h2>Check-ins recentes</h2></div>
+  {% for c in checkins %}
+  <div class="cartao linha-item"><span style="font-size:1.6rem">{{ HUMOR[c.humor][0] }}</span><div class="meio">
+    <b>{{ c.data|dia_curto }}</b><div class="meta">Fissura {{ c.fissura }}/10{% if c.sono %} · sono {{ c.sono }}/5{% endif %}{% if c.gatilhos %} · {{ c.gatilhos }}{% endif %}</div>
+    {% if c.nota %}<div style="margin-top:4px">{{ c.nota }}</div>{% endif %}</div>
+    {% if c.usou %}<span class="tag vermelho">Usou</span>{% endif %}</div>
+  {% endfor %}
+  {% endif %}
+
+  <div class="secao" id="prontuario"><h2>Registros</h2></div>
+  {% for r in registros %}{{ registro_item(r, false) }}{% else %}<div class="vazio">Nenhum registro ainda.</div>{% endfor %}
+
+  <div class="secao"><h2>Dados</h2></div>
+  <div class="cartao detalhes"><dl>
+    {% if p.nascimento %}<dt>Nascimento</dt><dd>{{ p.nascimento|data_br }}</dd>{% endif %}
+    {% if p.telefone %}<dt>Telefone</dt><dd><a href="tel:{{ p.telefone }}">{{ p.telefone }}</a></dd>{% endif %}
+    {% if p.email %}<dt>E-mail</dt><dd>{{ p.email }}</dd>{% endif %}
+    {% if p.tempo_uso %}<dt>Tempo de uso</dt><dd>{{ p.tempo_uso }}</dd>{% endif %}
+    {% if p.inicio_tratamento %}<dt>Início</dt><dd>{{ p.inicio_tratamento|data_br }}</dd>{% endif %}
+    {% if p.emergencia_nome or p.emergencia_tel %}<dt>Emergência</dt><dd>{{ p.emergencia_nome or '' }} {% if p.emergencia_tel %}<a href="tel:{{ p.emergencia_tel }}">{{ p.emergencia_tel }}</a>{% endif %}</dd>{% endif %}
+  </dl>
+  {% if p.anamnese %}<details><summary>Anamnese</summary><div class="texto-longo">{{ p.anamnese }}</div></details>{% endif %}
+  </div>
+
+  <div class="secao" id="gravacao"><h2>Gravação de sessões</h2></div>
+  <div class="cartao">
+    {% if consentimento %}
+      <div class="termo"><span class="tag verde">Consentimento ativo</span><span class="meta">assinado em {{ consentimento.assinado_em|data_br }}{% if consentimento.versao %} · versão {{ consentimento.versao }}{% endif %}</span></div>
+      <div class="acoes" style="margin-top:12px">
+        <a class="btn sec peq esq" href="{{ url_for('arquivo_consentimento', cid=consentimento.id) }}" target="_blank" rel="noopener">Ver termo assinado</a>
+        <form method="post" action="{{ url_for('revogar_consentimento', cid=consentimento.id) }}" data-confirma="Registrar que o paciente revogou o consentimento? Novas gravações da sessão ficam bloqueadas.">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn perigo peq">Registrar revogação</button></form>
+      </div>
+    {% else %}
+      <p style="margin:0">Para gravar a sessão inteira, anexe o termo de consentimento assinado pelo paciente. Seu relato de fim de sessão não depende disso.</p>
+    {% endif %}
+    <details {{ 'open' if not consentimento }} style="margin-top:6px"><summary>{{ 'Substituir por um novo termo' if consentimento else 'Anexar termo assinado' }}</summary>
+      <form method="post" action="{{ url_for('novo_consentimento', pid=p.id) }}" enctype="multipart/form-data">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="duas">
+          <div class="campo" style="margin-top:4px"><label for="assinado_em">Data da assinatura</label><input id="assinado_em" name="assinado_em" type="date" max="{{ hoje }}" required value="{{ hoje }}"></div>
+          <div class="campo" style="margin-top:4px"><label for="versao">Versão do termo</label><input id="versao" name="versao" type="text" placeholder="Ex.: v1 2026"></div>
+        </div>
+        <div class="campo"><label for="arquivo">Termo assinado (PDF ou foto)</label><input id="arquivo" name="arquivo" type="file" accept="application/pdf,image/*" required></div>
+        <button class="btn bloco" style="margin-top:14px">Anexar termo</button>
+      </form>
+    </details>
+  </div>
+
+  <div class="secao" id="acesso"><h2>Acesso do paciente ao app</h2></div>
+  <div class="cartao">
+    {% if p.tem_acesso %}<p style="margin:0">✅ {{ p.nome.split()[0] }} já usa o app e faz check-ins.</p>
+      {% if link_senha %}
+      <p style="margin:12px 0 0">Envie este link para o paciente criar uma nova senha. Vale por 72 horas e funciona uma vez.</p>
+      <div class="link-copiar"><input id="link" type="text" readonly value="{{ link_senha }}"><button class="btn peq" type="button" id="compartilhar">Enviar</button></div>
+      {% else %}
+      <form method="post" action="{{ url_for('link_senha_paciente', pid=p.id) }}" style="margin-top:10px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sec peq">Paciente esqueceu a senha? Gerar link</button></form>
+      {% endif %}
+    {% elif link %}
+      <p style="margin:0">Envie este link ao paciente. Ele cria o próprio e-mail e senha; o link funciona uma única vez.</p>
+      <div class="link-copiar"><input id="link" type="text" readonly value="{{ link }}"><button class="btn peq" type="button" id="compartilhar">Enviar</button></div>
+    {% else %}
+      <p style="margin:0 0 10px">Com acesso, o paciente faz check-ins diários, vê as próximas sessões e as tarefas que você deixar.</p>
+      <form method="post" action="{{ url_for('gerar_convite', pid=p.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sec">Gerar link de convite</button></form>
+    {% endif %}
+  </div>
+
+  <div class="secao" id="lgpd"><h2>Dados e privacidade (LGPD)</h2></div>
+  <div class="cartao">
+    <a class="btn sec bloco" href="{{ url_for('exportar_paciente', pid=p.id) }}">Baixar todos os dados deste paciente</a>
+    <p class="meta" style="color:var(--apagado);font-size:.85rem;margin:6px 0 0">Use quando o paciente pedir uma cópia ou for transferido para outro profissional.</p>
+    {% if acessos %}<details style="margin-top:8px"><summary>Últimos acessos a esta ficha</summary>
+      {% for a in acessos %}<div class="lancamento"><div class="meio">{{ a.acao }}<div class="meta">{{ a.aparelho }}</div></div><span class="meta">{{ a.quando|data_br }} {{ a.quando|hora }}</span></div>{% endfor %}</details>{% endif %}
+    <details style="margin-top:4px"><summary style="color:var(--vermelho)">Excluir paciente e todos os dados</summary>
+      <form method="post" action="{{ url_for('excluir_paciente', pid=p.id) }}" data-confirma="Excluir definitivamente {{ p.nome }}? Sessões, registros, check-ins, pagamentos e transcrições serão apagados e não podem ser recuperados.">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <p style="margin:6px 0">Use apenas a pedido do paciente e quando não houver obrigação de guardar os registros. Baixe uma cópia antes.</p>
+        <div class="campo" style="margin-top:4px"><label for="confirma">Digite o nome <b>{{ p.nome }}</b> para confirmar</label><input id="confirma" name="confirma" type="text" autocomplete="off" required></div>
+        <button class="btn perigo" style="margin-top:8px">Excluir definitivamente</button></form>
+    </details>
+  </div>
+</main>
+{% endblock %}
+{% block scripts %}
+<script>
+var b = document.getElementById('compartilhar');
+if (b) b.addEventListener('click', function () {
+  var url = document.getElementById('link').value;
+  var txt = 'Seu acesso ao Equilibra: ';
+  if (navigator.share) navigator.share({ title: 'Equilibra', text: txt, url: url }).catch(function(){});
+  else navigator.clipboard.writeText(url).then(function () { b.textContent = 'Copiado'; });
+});
+</script>
+{% endblock %}

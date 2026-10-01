@@ -1,0 +1,71 @@
+{% extends "base.html" %}{% from "_itens.html" import grafico as mini with context %}
+{% block conteudo %}
+<header class="topo" style="align-items:center">
+  <div class="linha-item" style="flex:1;min-width:0">
+    <div class="avatar">{{ current_user.inicial }}</div>
+    <div class="meio"><div class="data" style="margin:0">{{ hoje|dia_longo }}</div>
+      <h1 style="font-size:1.55rem">{{ saudacao }}, {{ current_user.nome.split(' ·')[0].split()[0] }}</h1></div>
+  </div>
+</header>
+<main class="pagina">
+  {% set d = current_user.dias_limpo %}
+  {% if d is not none %}
+  <section class="limpo">
+    <div class="rotulo">Tempo sem uso</div>
+    <div class="dias">{{ d }}</div>
+    <div class="dias-sub">{% if d == 0 %}Hoje é o primeiro dia. Ele conta.{% else %}{{ 'dia' if d == 1 else 'dias' }}{% if d >= 30 %} · {{ d|tempo }}{% endif %}{% endif %}</div>
+    {% if prox %}<div class="prox"><span>Próxima conquista em</span><b>{{ prox[0] }} {{ 'dia' if prox[0] == 1 else 'dias' }}: {{ prox[1] }}</b></div>{% endif %}
+    {% if feitas %}<div class="medalhas" aria-label="Conquistas">{% for m in feitas %}<span class="medalha">🏅 {{ m }}</span>{% endfor %}</div>{% endif %}
+  </section>
+  {% endif %}
+
+  <div class="acoes" style="justify-content:stretch">
+    {% if ck %}
+    <a class="btn sec" style="flex:1" href="{{ url_for('checkin') }}">{{ HUMOR[ck.humor][0] }} Check-in feito · ajustar</a>
+    {% else %}
+    <a class="btn" style="flex:1" href="{{ url_for('checkin') }}">Fazer check-in de hoje</a>
+    {% endif %}
+    <a class="btn sec" style="flex:1" href="{{ url_for('respirar') }}">🫁 Respirar</a>
+  </div>
+  <a class="btn sec bloco" style="margin-top:10px" href="{{ url_for('ajuda') }}">🆘 Preciso de ajuda agora</a>
+
+  {% if tarefa %}
+  <div class="secao"><h2>Para esta semana</h2></div>
+  <div class="cartao">{{ tarefa.tarefa_paciente }}<div class="meta" style="color:var(--apagado);margin-top:6px">Combinado na sessão de {{ tarefa.data|dia_curto }}</div></div>
+  {% endif %}
+
+  {% if saldo is not none %}
+  <div class="secao"><h2>Minhas sessões</h2></div>
+  <div class="cartao">
+    {% if saldo >= 0 %}<b style="color:var(--verde)">Pacote em dia</b>{% else %}<b style="color:var(--ambar)">{{ -saldo }} {{ 'sessão' if saldo == -1 else 'sessões' }} a acertar</b>{% endif %}
+    <div class="meta" style="color:var(--apagado)">{% if saldo > 0 %}{{ saldo }} {{ 'sessão disponível' if saldo == 1 else 'sessões disponíveis' }}{% else %}Nenhuma sessão em crédito{% endif %}{% if current_user.sessoes_semana %} · {{ current_user.sessoes_semana }}x por semana{% endif %}{% if current_user.horario_pref %} · {{ current_user.horario_pref }}{% endif %}</div>
+  </div>
+  {% endif %}
+
+  <div class="secao"><h2>Próximas sessões</h2></div>
+  {% for c in proximas %}
+  <div class="cartao linha-item"><div class="hora-bloco"><b>{{ c.inicio|hora }}</b><span>{{ c.duracao }} min</span></div>
+    <div class="meio"><b>{{ c.inicio.date()|dia_curto }}</b><div class="meta">{{ TIPO_CONSULTA[c.tipo] }} com {{ current_user.terapeuta.nome.split()[0] }}</div></div></div>
+  {% else %}<div class="vazio">Nenhuma sessão marcada. Combine com seu terapeuta.</div>{% endfor %}
+
+  <div class="secao"><h2>Vontade de usar</h2></div>
+  <div class="cartao">{% if grafico %}{{ mini(grafico, 'Vontade de usar') }}<p class="meta" style="margin:8px 0 0;color:var(--apagado)">Pelos seus check-ins, de 0 a 10.</p>{% else %}<p style="margin:0;color:var(--apagado)">Faça check-ins para ver sua evolução aqui.</p>{% endif %}</div>
+
+  {% if recentes %}
+  <div class="secao"><h2>Check-ins recentes</h2><a href="{{ url_for('diario') }}">Ver todos</a></div>
+  {% for c in recentes %}
+  <div class="cartao linha-item"><span style="font-size:1.6rem">{{ HUMOR[c.humor][0] }}</span><div class="meio">
+    <b>{{ c.data|dia_curto }}</b><div class="meta">Vontade {{ c.fissura }}/10{% if c.sono %} · sono {{ c.sono }}/5{% endif %}{% if c.gatilhos %} · {{ c.gatilhos }}{% endif %}</div></div></div>
+  {% endfor %}
+  {% endif %}
+
+  <div class="secao"><h2>Aprender</h2><a href="{{ url_for('biblioteca') }}">Ver tudo</a></div>
+  <a class="cartao" href="{{ url_for('biblioteca', c='pratica') }}"><b>Práticas para momentos difíceis</b><div class="meta" style="color:var(--apagado)">Surfar a fissura, aterramento, respiração</div></a>
+
+  <a class="btn sec bloco" style="margin-top:28px" href="{{ url_for('conta_paciente') }}">Minha conta e meus dados</a>
+  {% if not vendo_como %}
+  <form method="post" action="{{ url_for('sair') }}" style="margin-top:32px;text-align:center">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sec peq">Sair da conta</button></form>
+  {% endif %}
+</main>
+{% endblock %}

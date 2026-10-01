@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div><a class="voltar" href="{{ url_for('casa') }}">‹ Início</a><h1>Minha conta</h1></div></header>
+<main class="pagina">
+  {% if not vendo_como %}
+  <div class="secao" style="margin-top:0"><h2>Trocar senha</h2></div>
+  <form method="post" class="cartao"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="campo" style="margin-top:0"><label for="atual">Senha atual</label><input id="atual" name="atual" type="password" autocomplete="current-password" required></div>
+    <div class="campo"><label for="senha">Nova senha</label><input id="senha" name="senha" type="password" autocomplete="new-password" minlength="8" required></div>
+    <div class="campo"><label for="confirma">Confirme</label><input id="confirma" name="confirma" type="password" autocomplete="new-password" minlength="8" required></div>
+    <button class="btn bloco" style="margin-top:12px">Trocar senha</button></form>
+  {% endif %}
+  <div class="secao"><h2>Meus dados</h2></div>
+  <div class="cartao">
+    <p style="margin:0 0 10px">Pela LGPD, você pode ter uma cópia dos seus dados: check-ins, sessões, combinados e pagamentos. As anotações clínicas privadas do terapeuta não entram neste arquivo; peça a ele se precisar.</p>
+    <a class="btn sec bloco" href="{{ url_for('exportar_meus_dados') }}">Baixar meus dados</a>
+    <p class="meta" style="color:var(--apagado);font-size:.85rem;margin-top:8px">Para corrigir ou apagar seus dados, fale com seu terapeuta.</p>
+  </div>
+  <p style="margin-top:24px;text-align:center"><a href="{{ url_for('termos') }}">Termos de uso</a> · <a href="{{ url_for('privacidade') }}">Política de privacidade</a></p>
+  {% if not vendo_como %}<form method="post" action="{{ url_for('sair') }}" style="margin-top:12px;text-align:center"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sec peq">Sair da conta</button></form>{% endif %}
+</main>
+{% endblock %}

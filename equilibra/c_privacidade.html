@@ -1,0 +1,30 @@
+{% extends "base.html" %}{% block body_class %}{{ '' if current_user.is_authenticated else 'sem-barra' }}{% endblock %}
+{% block conteudo %}
+<main class="pagina artigo" style="padding-top:24px">
+  <a class="voltar" href="{{ url_for('inicio') }}">‹ Voltar</a>
+  <h1>Política de privacidade</h1>
+  <p class="aviso-caixa" style="font-family:var(--sans)">Modelo inicial, baseado na LGPD (Lei 13.709/2018). Revise com um advogado antes de usar com pacientes reais e preencha os campos entre colchetes.</p>
+  <h3>1. Quem trata os dados</h3>
+  <p>O terapeuta é o controlador dos dados dos seus pacientes: ele decide o que registrar e para quê. [Nome do responsável pelo Equilibra] atua como operador, oferecendo a ferramenta e guardando os dados em nome do terapeuta.</p>
+  <h3>2. Quais dados</h3>
+  <ul><li>Cadastro: nome, contato, data de nascimento e contato de emergência.</li>
+    <li>Dados de saúde: substâncias em tratamento, registros de sessão, indicadores, testes toxicológicos, check-ins e transcrições.</li>
+    <li>Financeiro: pagamentos e pacotes de sessões.</li>
+    <li>Segurança: registro de acessos aos prontuários (data, ação e tipo de aparelho).</li></ul>
+  <h3>3. Para que</h3>
+  <p>Exclusivamente para o acompanhamento terapêutico do paciente e a gestão do consultório do terapeuta. Os dados não são vendidos nem usados para publicidade.</p>
+  <h3>4. Base legal</h3>
+  <p>Dados de saúde são tratados com o consentimento específico do paciente (art. 11, I da LGPD), registrado no convite de acesso e, para gravações, no termo de consentimento assinado.</p>
+  <h3>5. Com quem compartilhamos</h3>
+  <ul><li>Hospedagem do aplicativo e do banco de dados: [provedor de hospedagem, ex.: Render].</li>
+    <li>Quando a transcrição estiver ativada: provedor de transcrição de áudio [ex.: OpenAI]. O áudio é enviado para transcrição e apagado em seguida; o app não guarda o áudio.</li>
+    <li>Quando os resumos estiverem ativados: provedor de inteligência artificial [ex.: Anthropic]. O nome do paciente é substituído antes do envio.</li></ul>
+  <h3>6. Como protegemos</h3>
+  <p>Conexão criptografada, senhas guardadas com hash, anotações clínicas criptografadas no banco, saída automática por inatividade, verificação em duas etapas opcional e registro de acessos aos prontuários.</p>
+  <h3>7. Por quanto tempo</h3>
+  <p>Enquanto durar o acompanhamento e pelo prazo que o terapeuta for obrigado a guardar os registros. Depois disso, ou a pedido do paciente quando a lei permitir, os dados são excluídos.</p>
+  <h3>8. Seus direitos</h3>
+  <p>Você pode pedir acesso, correção, cópia e exclusão dos seus dados, e revogar o consentimento a qualquer momento. Pacientes podem baixar uma cópia em Minha conta. Para os demais pedidos, fale com seu terapeuta ou com [e-mail de contato].</p>
+  <p class="meta">Versão de {{ hoje.strftime('%m/%Y') }}.</p>
+</main>
+{% endblock %}

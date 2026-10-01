@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% block body_class %}sem-barra{% endblock %}
+{% block conteudo %}
+<main class="auth">{% include "_marca.html" %}
+  <h1>Nova senha</h1>
+  <form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="campo"><label for="senha">Nova senha</label><input id="senha" name="senha" type="password" autocomplete="new-password" minlength="8" required><div class="ajuda">Pelo menos 8 caracteres.</div></div>
+    <div class="campo"><label for="confirma">Confirme</label><input id="confirma" name="confirma" type="password" autocomplete="new-password" minlength="8" required></div>
+    <button class="btn bloco" style="margin-top:20px">Salvar nova senha</button></form>
+</main>
+{% endblock %}

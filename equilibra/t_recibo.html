@@ -1,0 +1,17 @@
+{% extends "base.html" %}{% block body_class %}sem-barra{% endblock %}
+{% block titulo %}Recibo · {{ pg.paciente.nome }}{% endblock %}
+{% block conteudo %}
+<div class="so-tela pagina" style="padding-top:16px"><a class="voltar" href="{{ url_for('financeiro', mes=pg.data.strftime('%Y-%m')) }}">‹ Finanças</a>
+  <div class="acoes" style="justify-content:stretch;margin-top:8px"><button class="btn" style="flex:1" onclick="window.print()">Salvar em PDF ou imprimir</button></div>
+  <p class="meta" style="color:var(--apagado);font-size:.85rem">No iPhone: toque no botão, depois em Compartilhar, e escolha Salvar em Arquivos ou envie pelo WhatsApp.</p></div>
+<article class="documento">
+  <div class="cabecalho"><div><h1>Recibo</h1><div class="meta">Nº {{ '%05d'|format(pg.id) }}</div></div>
+    <div style="text-align:right"><b>{{ t.nome }}</b>{% if t.registro_prof %}<br>{{ t.registro_prof }}{% endif %}{% if t.telefone %}<br>{{ t.telefone }}{% endif %}{% if t.cidade %}<br>{{ t.cidade }}{% endif %}</div></div>
+  <p style="margin-top:28px;font-size:1.05rem;line-height:1.8">Recebi de <b>{{ pg.paciente.nome }}</b> a quantia de <b>{{ pg.valor|moeda }}</b> ({{ extenso }}),
+    referente a {{ pg.sessoes if pg.sessoes else '' }} {{ 'sessão' if pg.sessoes == 1 else 'sessões' if pg.sessoes else 'atendimento' }} de terapia holística{% if pg.nota %} ({{ pg.nota }}){% endif %},
+    pago por {{ FORMAS.get(pg.forma or 'outro', 'outro meio')|lower }} em {{ pg.data|data_br }}.</p>
+  <p style="margin-top:24px">{{ t.cidade or '____________' }}, {{ pg.data.day }} de {{ ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'][pg.data.month-1] }} de {{ pg.data.year }}.</p>
+  <div class="assinatura">{{ t.nome }}{% if t.registro_prof %} · {{ t.registro_prof }}{% endif %}</div>
+  {% if not t.registro_prof or not t.cidade %}<p class="nota-rodape so-tela">Complete seu registro profissional e cidade em <a href="{{ url_for('conta_terapeuta') }}">Minha conta</a> para aparecerem no recibo.</p>{% endif %}
+</article>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<main class="pagina respirar">
+  <div class="fase" id="fase" aria-live="polite">Quando quiser, toque em começar</div>
+  <div class="circulo" id="circulo"><span id="conta"></span></div>
+  <p style="color:var(--apagado);max-width:32ch;margin:0">Inspire em 4, segure 4, solte em 6. Três a cinco minutos já acalmam o corpo. Se ficar tonto, respire normalmente.</p>
+  <div style="display:flex;gap:10px"><button class="btn" id="iniciar">Começar</button><a class="btn sec" href="{{ url_for('ajuda') }}">Preciso de ajuda</a></div>
+</main>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var c = document.getElementById('circulo'), f = document.getElementById('fase'), n = document.getElementById('conta'), b = document.getElementById('iniciar');
+  var passos = [['Inspire', 4, 'cheio'], ['Segure', 4, 'cheio'], ['Solte devagar', 6, 'expira']], ativo = false, t = null;
+  function etapa(i) {
+    if (!ativo) return;
+    var p = passos[i % 3], s = p[1];
+    f.textContent = p[0];
+    c.classList.toggle('expira', p[2] === 'expira');
+    c.classList.toggle('cheio', p[2] === 'cheio');
+    n.textContent = s;
+    var tic = setInterval(function () { s--; if (s > 0) n.textContent = s; else clearInterval(tic); }, 1000);
+    t = setTimeout(function () { etapa(i + 1); }, p[1] * 1000);
+  }
+  b.addEventListener('click', function () {
+    ativo = !ativo; b.textContent = ativo ? 'Pausar' : 'Começar';
+    if (ativo) etapa(0); else { clearTimeout(t); c.classList.remove('cheio'); f.textContent = 'Pausado'; n.textContent = ''; }
+  });
+})();
+</script>
+{% endblock %}

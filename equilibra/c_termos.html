@@ -1,0 +1,26 @@
+{% extends "base.html" %}{% block body_class %}{{ '' if current_user.is_authenticated else 'sem-barra' }}{% endblock %}
+{% block conteudo %}
+<main class="pagina artigo" style="padding-top:24px">
+  <a class="voltar" href="{{ url_for('inicio') }}">‹ Voltar</a>
+  <h1>Termos de uso</h1>
+  <p class="aviso-caixa" style="font-family:var(--sans)">Modelo inicial. Revise com um advogado antes de usar com pacientes reais e preencha os campos entre colchetes.</p>
+  <h3>1. O que é o Equilibra</h3>
+  <p>O Equilibra é uma ferramenta de apoio ao acompanhamento terapêutico holístico de pessoas em recuperação de dependência química. Ele organiza agenda, registros de sessão, check-ins e pagamentos. O Equilibra não presta atendimento de saúde, não faz diagnóstico e não substitui avaliação médica ou psicológica.</p>
+  <h3>2. Quem usa</h3>
+  <p>Terapeutas criam a própria conta e cadastram seus pacientes. Pacientes recebem acesso por convite do terapeuta. Cada pessoa é responsável por manter a própria senha em sigilo.</p>
+  <h3>3. Responsabilidades do terapeuta</h3>
+  <ul><li>Obter o consentimento do paciente para registrar e tratar seus dados, inclusive para gravações de sessão.</li>
+    <li>Registrar informações verdadeiras e usá-las apenas no acompanhamento do paciente.</li>
+    <li>Revisar tudo o que for sugerido pela inteligência artificial antes de salvar no prontuário.</li>
+    <li>Encaminhar o paciente a serviços de saúde ou de emergência sempre que houver risco.</li></ul>
+  <h3>4. Inteligência artificial</h3>
+  <p>Quando ativadas, a transcrição de áudio e os resumos são feitos por serviços de inteligência artificial de terceiros. Os resultados podem conter erros e são apenas sugestões. A decisão clínica é sempre do terapeuta.</p>
+  <h3>5. Emergências</h3>
+  <p>O Equilibra não é um serviço de emergência. Em risco de vida, ligue 192 (SAMU). Para apoio emocional, ligue 188 (CVV).</p>
+  <h3>6. Disponibilidade</h3>
+  <p>Buscamos manter o serviço disponível, mas podem ocorrer interrupções para manutenção ou por falhas de terceiros. Recomendamos baixar periodicamente a cópia dos dados em Minha conta.</p>
+  <h3>7. Contato</h3>
+  <p>[Nome do responsável pelo Equilibra] · [e-mail de contato]</p>
+  <p class="meta">Versão de {{ hoje.strftime('%m/%Y') }}.</p>
+</main>
+{% endblock %}
