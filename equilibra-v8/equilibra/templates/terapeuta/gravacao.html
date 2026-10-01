@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div><a class="voltar" href="{{ url_for('fim_sessao') }}">‹ Fim de sessão</a>
+  <h1>{{ t.paciente.nome }}</h1>
+  <div class="sub">{{ 'Sessão gravada' if t.tipo == 'consulta' else 'Relato de fim de sessão' }} · {{ t.criado_em|data_br }} · {{ t.segundos // 60 }} min</div></div></header>
+<main class="pagina">
+  {% set d = t.dados %}
+  {% if t.erro %}<div class="msg erro">{{ t.erro }}</div>{% endif %}
+  {% if t.falhas %}<div class="aviso-caixa" style="margin-bottom:12px">{{ t.falhas }} {{ 'tentativa' if t.falhas == 1 else 'tentativas' }} de transcrição falharam. Algum trecho pode estar faltando.</div>{% endif %}
+  {% if t.status == 'gravando' %}<div class="aviso-caixa" style="margin-bottom:12px">Esta gravação foi interrompida antes de terminar. O que foi transcrito está abaixo.</div>{% endif %}
+
+  {% if not d and t.texto %}
+  <div class="cartao" style="background:var(--primaria-clara);border-color:var(--primaria-media)">
+    <b>Passo 1 de 2: confira a transcrição</b>
+    <p style="margin:6px 0 0">Corrija nomes, números e palavras que saíram errados. A IA vai resumir exatamente este texto e só pode usar o que estiver escrito nele.</p>
+  </div>
+  {% endif %}
+
+  {% if d %}
+    {% if d.sinais_alerta %}<div class="atencao"><h3>Sinais de alerta mencionados</h3><ul>{% for a in d.sinais_alerta %}<li>{{ a.texto if a is mapping else a }}{% if a is mapping and a.trecho %}<small>“{{ a.trecho }}”</small>{% elif a is mapping %}<small>Trecho não confirmado na transcrição: confira.</small>{% endif %}</li>{% endfor %}</ul></div>{% endif %}
+    <div class="secao"><h2>Resumo</h2><span class="tag {{ d.risco }}">Risco {{ RISCO[d.risco]|lower }}</span></div>
+    <div class="cartao texto-longo">{{ d.resumo }}</div>
+    {% set ev = d.evidencias or {} %}
+    {% if ev %}
+    <div class="secao"><h2>O que a IA encontrou</h2></div>
+    <div class="cartao">
+      {% if d.humor %}<div class="barra-ind"><span>Humor</span><b class="meta" style="color:var(--primaria)">{{ HUMOR[d.humor][0] }} {{ HUMOR[d.humor][1] }}</b></div><div class="prova" style="margin-bottom:12px"><q>{{ ev.humor }}</q></div>{% endif %}
+      {% for campo, rotulo, positivo in INDICADORES %}{% if d[campo] is not none %}
+      <div class="barra-ind"><span>{{ rotulo }}</span><b class="meta" style="color:var(--primaria)">{{ d[campo] }}/10</b>
+        <div class="trilho"><span style="width:{{ d[campo] * 10 }}%"></span></div></div>
+      <div class="prova" style="margin-bottom:12px"><q>{{ ev[campo] }}</q></div>
+      {% endif %}{% endfor %}
+      <p class="meta" style="margin:0;color:var(--apagado)">Cada valor só aparece aqui se a IA mostrou o trecho da transcrição que o justifica.{% if d.descartados %} {{ d.descartados|length }} sem prova {{ 'foi descartado' if d.descartados|length == 1 else 'foram descartados' }}.{% endif %}</p>
+    </div>
+    {% endif %}
+    {% if d.tarefa_paciente %}<div class="cartao"><b>Tarefa sugerida:</b> {{ d.tarefa_paciente }}</div>{% endif %}
+    <a class="btn bloco" href="{{ destino }}" style="margin-top:16px">Passo final: revisar e salvar no prontuário</a>
+  {% endif %}
+
+  {% if t.texto %}
+  <form method="post" action="{{ url_for('gravacao_texto', tid=t.id) }}" style="margin-top:16px">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    {% if d %}<details class="cartao"><summary>Transcrição revisada (editar gera um novo resumo)</summary>{% endif %}
+    <div class="campo" style="margin-top:{{ '8px' if d else '0' }}"><label for="texto">Transcrição</label>
+      <textarea id="texto" name="texto" rows="14" style="font-size:.97rem">{{ t.texto }}</textarea>
+      {% if t.texto_original and t.texto_original.strip() != t.texto.strip() %}<div class="ajuda">Você fez correções. <a href="#original" onclick="document.getElementById('original').open=true">Ver versão original</a></div>{% endif %}</div>
+    <div class="acoes" style="margin-top:12px">
+      <button class="btn sec" name="gerar" value="0">Salvar correções</button>
+      {% if ia_ativa %}<button class="btn" name="gerar" value="1">{{ 'Salvar e gerar novo resumo' if d else 'Passo 2: gerar resumo' }}</button>
+      {% else %}<a class="btn" href="{{ destino }}">Escrever registro</a>{% endif %}
+    </div>
+    {% if d %}</details>{% endif %}
+  </form>
+  {% if t.texto_original and t.texto_original.strip() != t.texto.strip() %}
+  <details class="cartao" id="original" style="margin-top:12px"><summary>Versão original da transcrição</summary><div class="texto-longo" style="font-size:.95rem;color:var(--apagado)">{{ t.texto_original }}</div></details>
+  {% endif %}
+  {% endif %}
+  <p class="meta" style="color:var(--apagado);font-size:.88rem;margin-top:12px">O áudio foi apagado depois de transcrito. Só o texto fica guardado.</p>
+
+  <form method="post" action="{{ url_for('gravacao_excluir', tid=t.id) }}" data-confirma="Excluir esta transcrição? Isso não pode ser desfeito." style="margin-top:20px">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn perigo">Excluir transcrição</button></form>
+</main>
+{% endblock %}

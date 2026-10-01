@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div><h1>Finanças</h1><div class="sub">Recebimentos, despesas e pacotes</div></div>
+  <a class="btn sec peq" href="{{ url_for('financeiro_exportar', mes='%d-%02d'|format(ano, mes)) }}">Exportar</a></header>
+<main class="pagina">
+  <div class="semana-nav">
+    <a href="{{ url_for('financeiro', mes=link_ant) }}" aria-label="Mês anterior">‹</a>
+    <b style="text-transform:capitalize">{{ rotulo }}</b>
+    {% if e_futuro %}<span style="width:44px"></span>{% else %}<a href="{{ url_for('financeiro', mes=link_prox) }}" aria-label="Próximo mês">›</a>{% endif %}
+  </div>
+
+  <div class="numeros">
+    <div class="numero fin-numero"><div class="ic" style="background:var(--primaria-clara)">⬇</div><div><b>{{ recebido|moeda }}</b><span>Recebido</span></div></div>
+    <div class="numero fin-numero"><div class="ic" style="background:var(--vermelho-claro)">⬆</div><div><b>{{ gastos|moeda }}</b><span>Despesas</span></div></div>
+    <div class="numero fin-numero largo"><div class="ic" style="background:var(--primaria-clara)">=</div><div><b class="{{ 'positivo' if resultado >= 0 else 'negativo' }}">{{ resultado|moeda }}</b><span>Resultado do mês</span></div></div>
+    <div class="numero fin-numero"><div class="ic" style="background:var(--ambar-claro)">⏳</div><div><b>{{ a_receber|moeda }}</b><span>A receber hoje</span></div></div>
+    <div class="numero fin-numero"><div class="ic" style="background:var(--primaria-clara)">🗓️</div><div><b>{{ previsto|moeda }}</b><span>{{ agendadas }} sessões ainda agendadas</span></div></div>
+  </div>
+
+  {% if devendo or acabando %}
+  <div class="secao"><h2>Atenção</h2></div>
+  <div class="cartao">
+    {% for x in devendo %}<div class="lancamento"><span class="tag vermelho">Deve</span><a class="meio" href="{{ url_for('paciente_detalhe', pid=x.p.id) }}#pagamentos" style="color:inherit"><b>{{ x.p.nome }}</b><div class="meta">{{ -x.saldo }} {{ 'sessão' if x.saldo == -1 else 'sessões' }} sem pagamento</div></a><span class="valor-l">{{ x.a_receber|moeda }}</span></div>{% endfor %}
+    {% for x in acabando %}<div class="lancamento"><span class="tag ambar">Acabando</span><a class="meio" href="{{ url_for('paciente_detalhe', pid=x.p.id) }}#pagamentos" style="color:inherit"><b>{{ x.p.nome }}</b><div class="meta">{{ x.saldo }} {{ 'sessão' if x.saldo == 1 else 'sessões' }} no pacote</div></a></div>{% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="secao"><h2>Últimos 6 meses</h2></div>
+  <div class="cartao">
+    <div class="barras-mes" role="img" aria-label="Recebimentos e despesas nos últimos 6 meses">
+      {% for x in serie %}<div class="mes"><div class="par">
+        <span class="rec" style="height:{{ (x.recebido * 100 / maior)|round(1) }}%" title="Recebido: {{ x.recebido|moeda }}"></span>
+        <span class="des" style="height:{{ (x.gastos * 100 / maior)|round(1) }}%" title="Despesas: {{ x.gastos|moeda }}"></span></div>
+        <small>{{ x.rotulo }}</small></div>{% endfor %}
+    </div>
+    <div class="legenda"><span><i style="background:#8EC5EE"></i>Recebido</span><span><i style="background:#F3C7C1"></i>Despesas</span></div>
+  </div>
+
+  <div class="secao"><h2>Registrar</h2></div>
+  <div class="cartao">
+    <details><summary>+ Recebimento de paciente</summary>
+      <form method="post" action="{{ url_for('financeiro_pagamento') }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="voltar" value="{{ request.full_path }}">
+        <div class="campo" style="margin-top:4px"><label for="pg-paciente">Paciente</label>
+          <select id="pg-paciente" name="paciente" required><option value="">Escolha</option>
+            {% for p in pacientes %}<option value="{{ p.id }}" data-valor="{{ ('%.2f'|format(p.valor_sessao)).replace('.', ',') if p.valor_sessao else '' }}">{{ p.nome }}</option>{% endfor %}</select></div>
+        <div class="duas">
+          <div class="campo"><label for="pg-valor">Valor (R$)</label><input id="pg-valor" name="valor" type="text" inputmode="decimal" required></div>
+          <div class="campo"><label for="pg-sessoes">Sessões pagas</label><input id="pg-sessoes" name="sessoes" type="number" min="0" value="1" inputmode="numeric"></div>
+        </div>
+        <div class="duas">
+          <div class="campo"><label for="pg-forma">Forma</label><select id="pg-forma" name="forma">{% for k, v in FORMAS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+          <div class="campo"><label for="pg-data">Data</label><input id="pg-data" name="data" type="date" value="{{ hoje }}"></div>
+        </div>
+        <div class="campo"><label for="pg-nota">Observação</label><input id="pg-nota" name="nota" type="text" placeholder="Pacote de 4 sessões…"></div>
+        <button class="btn bloco" style="margin-top:14px">Registrar recebimento</button>
+      </form>
+    </details>
+    <details><summary>+ Despesa</summary>
+      <form method="post" action="{{ url_for('financeiro_despesa') }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="voltar" value="{{ request.full_path }}">
+        <div class="campo" style="margin-top:4px"><label for="de-desc">Descrição</label><input id="de-desc" name="descricao" type="text" required placeholder="Aluguel da sala, caixa de testes…"></div>
+        <div class="duas">
+          <div class="campo"><label for="de-valor">Valor (R$)</label><input id="de-valor" name="valor" type="text" inputmode="decimal" required></div>
+          <div class="campo"><label for="de-data">Data</label><input id="de-data" name="data" type="date" value="{{ hoje }}"></div>
+        </div>
+        <div class="campo"><label for="de-cat">Categoria</label><select id="de-cat" name="categoria">{% for k, v in CATEGORIAS_DESPESA.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+        <button class="btn bloco" style="margin-top:14px">Registrar despesa</button>
+      </form>
+    </details>
+  </div>
+
+  <div class="secao"><h2>Recebimentos</h2><span class="meta">{{ pagamentos|length }}</span></div>
+  {% if por_forma %}<div class="etiquetas" style="margin:0 0 10px">{% for k, v in por_forma.items() %}<span class="tag azul">{{ FORMAS.get(k, 'Outro') }}: {{ v|moeda }}</span>{% endfor %}</div>{% endif %}
+  <div class="cartao">
+    {% for pg in pagamentos %}
+    <div class="lancamento">
+      <div class="meio"><b>{{ pg.paciente.nome }}</b><div class="meta">{{ pg.data|data_br }} · {{ FORMAS.get(pg.forma or 'outro', 'Outro') }}{% if pg.sessoes %} · {{ pg.sessoes }} {{ 'sessão' if pg.sessoes == 1 else 'sessões' }}{% endif %}{% if pg.nota %} · {{ pg.nota }}{% endif %}</div>
+        <a class="mini-btn" href="{{ url_for('recibo', pgid=pg.id) }}" style="padding-left:0">Recibo</a></div>
+      <span class="valor-l positivo">{{ pg.valor|moeda }}</span>
+      <form method="post" action="{{ url_for('financeiro_pagamento_excluir', pgid=pg.id) }}" data-confirma="Excluir este recebimento? O saldo de sessões do paciente muda.">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="voltar" value="{{ request.full_path }}"><button class="mini-btn" aria-label="Excluir recebimento">✕</button></form>
+    </div>
+    {% else %}<p class="meta" style="margin:0;color:var(--apagado)">Nenhum recebimento neste mês.</p>{% endfor %}
+  </div>
+
+  <div class="secao"><h2>Despesas</h2><span class="meta">{{ despesas|length }}</span></div>
+  {% if por_categoria %}<div class="etiquetas" style="margin:0 0 10px">{% for k, v in por_categoria.items() %}<span class="tag">{{ CATEGORIAS_DESPESA.get(k, 'Outros') }}: {{ v|moeda }}</span>{% endfor %}</div>{% endif %}
+  <div class="cartao">
+    {% for d in despesas %}
+    <div class="lancamento">
+      <div class="meio"><b>{{ d.descricao }}</b><div class="meta">{{ d.data|data_br }} · {{ CATEGORIAS_DESPESA.get(d.categoria, 'Outros') }}</div></div>
+      <span class="valor-l negativo">− {{ d.valor|moeda }}</span>
+      <form method="post" action="{{ url_for('financeiro_despesa_excluir', did=d.id) }}" data-confirma="Excluir esta despesa?">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="voltar" value="{{ request.full_path }}"><button class="mini-btn" aria-label="Excluir despesa">✕</button></form>
+    </div>
+    {% else %}<p class="meta" style="margin:0;color:var(--apagado)">Nenhuma despesa neste mês.</p>{% endfor %}
+  </div>
+
+  <div class="secao"><h2>Pacotes dos pacientes</h2></div>
+  <div class="cartao">
+    {% for x in situacao %}
+    <a class="lancamento" href="{{ url_for('paciente_detalhe', pid=x.p.id) }}#pagamentos" style="color:inherit">
+      <div class="meio"><b>{{ x.p.nome }}</b><div class="meta">{% if x.ultimo %}Último pagamento {{ x.ultimo.data|data_br }}{% else %}Sem pagamentos{% endif %}{% if x.p.valor_sessao %} · {{ x.p.valor_sessao|moeda }}/sessão{% endif %}</div></div>
+      <span class="tag {{ 'vermelho' if x.situacao == 'deve' else 'ambar' if x.situacao == 'acabando' else 'verde' }}">{% if x.saldo < 0 %}deve {{ -x.saldo }}{% else %}{{ x.saldo }} em crédito{% endif %}</span>
+    </a>
+    {% else %}<p class="meta" style="margin:0;color:var(--apagado)">Nenhum paciente ativo.</p>{% endfor %}
+  </div>
+  <p class="meta" style="color:var(--apagado);font-size:.85rem;margin-top:10px">O saldo de sessões é: sessões pagas menos sessões realizadas. “A receber” usa o valor por sessão do cadastro de cada paciente.</p>
+</main>
+{% endblock %}
+{% block scripts %}
+<script>
+var sel = document.getElementById('pg-paciente'), val = document.getElementById('pg-valor');
+if (sel) sel.addEventListener('change', function () { var v = sel.selectedOptions[0].dataset.valor; if (v && !val.value) val.value = v; });
+</script>
+{% endblock %}

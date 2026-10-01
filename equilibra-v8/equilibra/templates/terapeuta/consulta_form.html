@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div><a class="voltar" href="{{ url_for('agenda', dia=padrao.date().isoformat()) }}">‹ Agenda</a>
+  <h1>{{ 'Editar sessão' if c.id else 'Nova sessão' }}</h1></div></header>
+<main class="pagina">
+{% if not pacientes %}
+  <div class="vazio">Cadastre um paciente antes de agendar.<br><a class="btn peq" href="{{ url_for('paciente_form') }}">Cadastrar paciente</a></div>
+{% else %}
+<form method="post">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="campo"><label for="paciente">Paciente *</label>
+    <select id="paciente" name="paciente" required><option value="">Escolha</option>
+      {% for p in pacientes %}<option value="{{ p.id }}" {{ 'selected' if c.paciente_id == p.id }}>{{ p.nome }}</option>{% endfor %}</select></div>
+  <div class="duas">
+    <div class="campo"><label for="data">Data *</label><input id="data" name="data" type="date" required value="{{ padrao.date().isoformat() }}"></div>
+    <div class="campo"><label for="hora">Horário *</label><input id="hora" name="hora" type="time" required value="{{ padrao.strftime('%H:%M') }}"></div>
+  </div>
+  <div class="duas">
+    <div class="campo"><label for="duracao">Duração (min)</label><input id="duracao" name="duracao" type="number" min="10" max="240" step="5" inputmode="numeric" value="{{ c.duracao or 50 }}"></div>
+    <div class="campo"><label for="tipo">Tipo</label><select id="tipo" name="tipo">
+      {% for k, v in TIPO_CONSULTA.items() %}<option value="{{ k }}" {{ 'selected' if c.tipo == k }}>{{ v }}</option>{% endfor %}</select></div>
+  </div>
+  <div class="campo"><label for="status">Status</label><select id="status" name="status">
+    {% for k, v in STATUS_CONSULTA.items() %}<option value="{{ k }}" {{ 'selected' if c.status == k }}>{{ v }}</option>{% endfor %}</select></div>
+  <div class="campo"><label for="notas_pre">Notas pré-sessão</label>
+    <textarea id="notas_pre" name="notas_pre" placeholder="O que lembrar antes da sessão">{{ c.notas_pre or '' }}</textarea></div>
+  {% if not c.id %}
+  <div class="duas">
+    <div class="campo"><label for="repetir">Repetir</label><select id="repetir" name="repetir">
+      <option value="">Não repetir</option><option value="semanal">Toda semana</option><option value="quinzenal">A cada 2 semanas</option></select></div>
+    <div class="campo"><label for="vezes">Quantas sessões</label><input id="vezes" name="vezes" type="number" min="1" max="52" value="8" inputmode="numeric"></div>
+  </div>
+  <p class="meta" style="color:var(--apagado);font-size:.85rem;margin-top:6px">Com repetição, o app cria todas as sessões de uma vez, no mesmo dia da semana e horário.</p>
+  {% endif %}
+  {% if c.id %}
+  <div class="grupo"><h3>Horário real do atendimento</h3>
+    <p class="meta" style="color:var(--apagado);font-size:.88rem;margin:4px 0 0">Preenchido pelo check-in e check-out. Corrija aqui se esqueceu de marcar na hora.</p>
+    <div class="duas">
+      <div class="campo"><label for="checkin_hora">Check-in</label><input id="checkin_hora" name="checkin_hora" type="time" value="{{ c.checkin_em.strftime('%H:%M') if c.checkin_em else '' }}"></div>
+      <div class="campo"><label for="checkout_hora">Check-out</label><input id="checkout_hora" name="checkout_hora" type="time" value="{{ c.checkout_em.strftime('%H:%M') if c.checkout_em else '' }}"></div>
+    </div>
+    {% if c.minutos_atendidos %}<p class="meta" style="margin-top:8px">Tempo atendido: <b>{{ c.minutos_atendidos|horas }}</b></p>{% endif %}
+  </div>
+  {% endif %}
+  <div class="acoes">
+    <a class="btn sec" href="{{ url_for('agenda', dia=padrao.date().isoformat()) }}">Cancelar</a>
+    <button class="btn">Salvar sessão</button>
+  </div>
+</form>
+{% if c.id %}
+<form method="post" action="{{ url_for('excluir_consulta', cid=c.id) }}" data-confirma="Excluir esta sessão? O registro pós-sessão, se houver, continua no prontuário." style="margin-top:8px">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn perigo">Excluir sessão</button></form>
+{% endif %}
+{% endif %}
+</main>
+{% endblock %}

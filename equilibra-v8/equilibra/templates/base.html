@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light only">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Equilibra">
+<meta name="robots" content="noindex">
+<title>{% block titulo %}Equilibra{% endblock %}</title>
+<link rel="manifest" href="{{ url_for('manifest') }}">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+<link rel="icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=5">
+</head>
+{% import "_icones.html" as ic %}
+{% set sem_barra = self.body_class()|trim == 'sem-barra' %}
+<body class="{% block body_class %}{% endblock %}">
+{% if vendo_como and current_user.is_authenticated and current_user.papel == 'paciente' %}<div class="faixa-demo" role="note"><span>👀 Você está vendo o app como <b>{{ current_user.nome }}</b></span>
+  <form method="post" action="{{ url_for('demo_voltar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn peq">Voltar ao terapeuta</button></form></div>{% endif %}
+{% if modo_avaliacao %}<div class="faixa-avaliacao" role="note">Versão de avaliação · IA simulada, sem custo · não cadastre pacientes reais</div>{% endif %}
+{% with msgs = get_flashed_messages(with_categories=true) %}
+{% if msgs %}<div class="mensagens" role="status">{% for cat, m in msgs %}<div class="msg {{ cat }}">{{ m }}</div>{% endfor %}</div>{% endif %}
+{% endwith %}
+{% block conteudo %}{% endblock %}
+<p class="versao">Equilibra {{ VERSAO }} · <a href="{{ url_for('termos') }}">Termos</a> · <a href="{{ url_for('privacidade') }}">Privacidade</a></p>
+{% if current_user.is_authenticated and not sem_barra %}
+{% set ep = request.endpoint %}
+<div class="barra"><nav aria-label="Navegação principal">
+{% if current_user.papel == 'terapeuta' %}
+  <a href="{{ url_for('painel') }}" class="{{ 'ativo' if ep == 'painel' }}">{{ ic.inicio() }}Início</a>
+  <a href="{{ url_for('agenda') }}" class="{{ 'ativo' if ep in ['agenda','consulta_form'] }}">{{ ic.agenda() }}Agenda</a>
+  <a href="{{ url_for('fim_sessao') }}" class="{{ 'ativo' if ep in ['fim_sessao','gravacao_ver'] }}">{{ ic.microfone() }}Fim sessão</a>
+  <a href="{{ url_for('pacientes') }}" class="{{ 'ativo' if ep in ['pacientes','paciente_detalhe','paciente_form'] }}">{{ ic.pessoas() }}Pacientes</a>
+  <a href="{{ url_for('registros') }}" class="{{ 'ativo' if ep in ['registros','registro_form','registro_detalhe','mood'] }}">{{ ic.prancheta() }}Registros</a>
+  <a href="{{ url_for('financeiro') }}" class="{{ 'ativo' if ep in ['financeiro'] }}">{{ ic.dinheiro() }}Finanças</a>
+{% else %}
+  <a href="{{ url_for('casa') }}" class="{{ 'ativo' if ep == 'casa' }}">{{ ic.inicio() }}Início</a>
+  <a href="{{ url_for('checkin') }}" class="{{ 'ativo' if ep == 'checkin' }}">{{ ic.rosto() }}Check-in</a>
+  <a href="{{ url_for('diario') }}" class="{{ 'ativo' if ep == 'diario' }}">{{ ic.agenda() }}Diário</a>
+  <a href="{{ url_for('biblioteca') }}" class="{{ 'ativo' if ep in ['biblioteca','artigo'] }}">{{ ic.livro() }}Aprender</a>
+  <a href="{{ url_for('ajuda') }}" class="{{ 'ativo' if ep in ['ajuda','respirar'] }}">{{ ic.coracao() }}Ajuda</a>
+{% endif %}
+</nav></div>
+{% endif %}
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
+document.querySelectorAll('input[type=range]').forEach(function (r) {
+  var out = document.getElementById(r.id + '-v');
+  function upd() { r.style.setProperty('--p', (r.value - r.min) / (r.max - r.min) * 100 + '%'); if (out) out.textContent = r.value + '/10'; }
+  r.addEventListener('input', upd); upd();
+});
+document.querySelectorAll('[data-mostra]').forEach(function (t) {
+  var alvo = document.getElementById(t.dataset.mostra);
+  function upd() { alvo.hidden = !t.checked; }
+  t.addEventListener('change', upd); upd();
+});
+document.querySelectorAll('[data-indicador]').forEach(function (box) {
+  var faixa = box.querySelector('input[type=range]'), oculto = box.querySelector('input[type=hidden]');
+  var valor = box.querySelector('[data-valor]'), limpar = box.querySelector('[data-limpar]');
+  function marcar() { oculto.value = faixa.value; box.classList.add('avaliado'); valor.textContent = faixa.value + '/10'; valor.classList.remove('vazio'); limpar.hidden = false; }
+  faixa.addEventListener('input', marcar);
+  faixa.addEventListener('change', marcar);
+  limpar.addEventListener('click', function () { oculto.value = ''; box.classList.remove('avaliado'); valor.textContent = 'não avaliado'; valor.classList.add('vazio'); limpar.hidden = true; });
+});
+document.querySelectorAll('.cronometro[data-desde]').forEach(function (el) {
+  var desde = new Date(el.dataset.desde);
+  function upd() { var m = Math.max(0, Math.floor((Date.now() - desde.getTime()) / 60000)); el.textContent = m < 60 ? m + ' min' : Math.floor(m / 60) + 'h' + String(m % 60).padStart(2, '0'); }
+  upd(); setInterval(upd, 30000);
+});
+document.querySelectorAll('[data-confirma]').forEach(function (f) {
+  f.addEventListener('submit', function (e) { if (!confirm(f.dataset.confirma)) e.preventDefault(); });
+});
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

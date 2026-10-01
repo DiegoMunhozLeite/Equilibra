@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div><h1>Verificação ativada</h1><div class="sub">Guarde estes códigos de recuperação agora</div></div></header>
+<main class="pagina">
+  <div class="aviso-caixa">Cada código funciona uma vez, no lugar do app autenticador, se você perder o celular. Eles não aparecem de novo. Anote ou tire um print e guarde em lugar seguro.</div>
+  <div class="cartao" style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px;font:600 1.15rem ui-monospace,Menlo,monospace;text-align:center">
+    {% for c in codigos %}<span>{{ c[:4] }} {{ c[4:] }}</span>{% endfor %}</div>
+  <a class="btn bloco" style="margin-top:18px" href="{{ url_for('conta_terapeuta') }}">Já guardei</a>
+</main>
+{% endblock %}

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div><a class="voltar" href="{{ url_for('paciente_detalhe', pid=p.id) }}">‹ {{ p.nome }}</a>
+  <h1>Relatório de evolução</h1><div class="sub">Para família, empresa ou outro profissional. Sai pronto para salvar em PDF.</div></div></header>
+<main class="pagina">
+<form method="post">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="campo" style="margin-top:0"><label for="dias">Período</label>
+    <select id="dias" name="dias">{% for d, rot in [(30,'Últimos 30 dias'),(90,'Últimos 3 meses'),(180,'Últimos 6 meses'),(365,'Último ano'),(3650,'Todo o tratamento')] %}<option value="{{ d }}" {{ 'selected' if d == 90 }}>{{ rot }}</option>{% endfor %}</select></div>
+  <div class="campo"><label for="destinatario">Destinatário (opcional)</label><input id="destinatario" name="destinatario" type="text" placeholder="Ex.: à família, ao médico responsável"></div>
+  <label class="alternar"><span>Incluir substâncias em tratamento</span><input type="checkbox" name="incluir_substancias" value="1"></label>
+  <label class="alternar"><span>Incluir anotações clínicas de cada sessão</span><input type="checkbox" name="incluir_evolucao" value="1"></label>
+  <p class="meta" style="color:var(--apagado);font-size:.85rem;margin-top:6px">Por padrão, o relatório mostra só números e resultados. Inclua anotações clínicas apenas com autorização do paciente.</p>
+  <div class="campo"><label for="parecer">Parecer do terapeuta</label>
+    <textarea id="parecer" name="parecer" rows="6" placeholder="Sua avaliação do período, em linguagem para o destinatário"></textarea></div>
+  <button class="btn bloco" style="margin-top:20px">Gerar relatório</button>
+</form>
+</main>
+{% endblock %}

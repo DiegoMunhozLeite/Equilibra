@@ -1,0 +1,9 @@
+{% set ns = namespace(n=0) %}
+{% for campo, rotulo, positivo in INDICADORES %}{% if r[campo] is not none %}{% set ns.n = ns.n + 1 %}
+<div class="barra-ind">
+  <span>{{ rotulo }} <span class="meta" style="color:var(--apagado)">{{ '↑ melhor' if positivo else '↓ melhor' }}</span></span>
+  <b class="meta" style="color:var(--primaria)">{{ r[campo] }}/10</b>
+  <div class="trilho"><span style="width:{{ r[campo] * 10 }}%"></span></div>
+</div>
+{% endif %}{% endfor %}
+{% if ns.n == 0 %}<p class="meta" style="margin:0;color:var(--apagado)">Nenhum indicador avaliado nesta sessão.</p>{% endif %}

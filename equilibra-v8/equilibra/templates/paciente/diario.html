@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% from "_itens.html" import grafico as mini  with context %}
+{% block conteudo %}
+<header class="topo"><div><h1>Meu diário</h1><div class="sub">Seu caminho, dia a dia</div></div></header>
+<main class="pagina">
+  {% if consultas %}
+  <div class="secao" style="margin-top:0"><h2>Próximas sessões</h2></div>
+  {% for c in consultas %}<div class="cartao linha-item"><div class="hora-bloco"><b>{{ c.inicio|hora }}</b><span>{{ c.duracao }} min</span></div><div class="meio"><b>{{ c.inicio.date()|dia_curto }}</b><div class="meta">{{ TIPO_CONSULTA[c.tipo] }}</div></div></div>{% endfor %}
+  {% endif %}
+  <div class="secao"><h2>Vontade de usar</h2></div>
+  <div class="cartao">{% if grafico %}{{ mini(grafico, 'Vontade de usar') }}{% else %}<p style="margin:0;color:var(--apagado)">Faça check-ins para ver sua evolução aqui.</p>{% endif %}</div>
+  {% if tarefas %}
+  <div class="secao"><h2>Combinados</h2></div>
+  {% for t in tarefas %}<div class="cartao">{{ t.tarefa_paciente }}<div class="meta" style="color:var(--apagado);margin-top:4px">{{ t.data|dia_curto }}</div></div>{% endfor %}
+  {% endif %}
+  <div class="secao"><h2>Check-ins</h2></div>
+  {% for c in checkins %}
+  <div class="cartao linha-item"><span style="font-size:1.6rem">{{ HUMOR[c.humor][0] }}</span><div class="meio"><b>{{ c.data|dia_curto }}</b>
+    <div class="meta">Vontade {{ c.fissura }}/10{% if c.gatilhos %} · {{ c.gatilhos }}{% endif %}</div>{% if c.nota %}<div style="margin-top:4px">{{ c.nota }}</div>{% endif %}</div></div>
+  {% else %}<div class="vazio">Nenhum check-in ainda.<br><a class="btn peq" href="{{ url_for('checkin') }}">Fazer o primeiro</a></div>{% endfor %}
+</main>
+{% endblock %}
