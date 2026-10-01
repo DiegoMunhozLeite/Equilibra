@@ -104,7 +104,7 @@ def financeiro():
     prox = (ano + 1, 1) if mes == 12 else (ano, mes + 1)
     ant = (ano - 1, 12) if mes == 1 else (ano, mes - 1)
     return render_template(
-        "terapeuta/financeiro.html", ano=ano, mes=mes, rotulo=f"{MESES[mes - 1]} de {ano}",
+        "t_financeiro.html", ano=ano, mes=mes, rotulo=f"{MESES[mes - 1]} de {ano}",
         recebido=recebido, gastos=gastos, resultado=recebido - gastos, serie=serie, maior=maior,
         pagamentos=pagamentos, despesas=despesas, por_forma=por_forma, por_categoria=por_categoria,
         agendadas=len(agendadas), previsto=previsto, situacao=situacao,
@@ -178,7 +178,7 @@ def recibo(pgid):
     pg = db.session.get(Pagamento, pgid)
     if not pg or pg.paciente.terapeuta_id != current_user.id:
         abort(404)
-    return render_template("terapeuta/recibo.html", pg=pg, t=current_user, extenso=valor_por_extenso(pg.valor))
+    return render_template("t_recibo.html", pg=pg, t=current_user, extenso=valor_por_extenso(pg.valor))
 
 
 @app.route("/t/financeiro/exportar")

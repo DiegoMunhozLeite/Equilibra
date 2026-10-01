@@ -35,7 +35,7 @@ def evolucao(paciente_id, limite=12):
 def relatorio_paciente(pid):
     p = meu_paciente(pid)
     if request.method == "GET":
-        return render_template("terapeuta/relatorio_opcoes.html", p=p)
+        return render_template("t_relatorio_opcoes.html", p=p)
     f = request.form
     dias = para_int(f.get("dias"), 90, 7, 3650)
     inicio = hoje() - timedelta(days=dias - 1)
@@ -66,7 +66,7 @@ def relatorio_paciente(pid):
         comparativo.append({"rotulo": rotulo, "antes": ma, "depois": md, "direcao": direcao, "n": len(valores)})
     registrar_acesso(p.id, "gerou relatório")
     return render_template(
-        "terapeuta/relatorio_paciente.html", p=p, t=current_user, dias=dias, inicio=inicio, fim=hoje(),
+        "t_relatorio_paciente.html", p=p, t=current_user, dias=dias, inicio=inicio, fim=hoje(),
         realizadas=len(realizadas), faltas=len(faltas), canceladas=sum(1 for c in consultas if c.status == "cancelada"),
         presenca=round(len(realizadas) * 100 / marcadas) if marcadas else None,
         minutos=sum(c.minutos_atendidos or 0 for c in realizadas), testes=testes, comparativo=comparativo,

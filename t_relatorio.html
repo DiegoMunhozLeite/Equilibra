@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div><a class="voltar" href="{{ url_for('agenda') }}">‹ Agenda</a>
+  <h1>Tempo de atendimento</h1><div class="sub">Calculado pelo check-in e check-out das sessões</div></div></header>
+<main class="pagina">
+  <div class="semana-nav">
+    <a href="{{ url_for('relatorio', mes=link_ant) }}" aria-label="Mês anterior">‹</a>
+    <b style="text-transform:capitalize">{{ r.rotulo }}</b>
+    {% if e_futuro %}<span style="width:44px"></span>{% else %}<a href="{{ url_for('relatorio', mes=link_prox) }}" aria-label="Próximo mês">›</a>{% endif %}
+  </div>
+
+  <div class="numeros">
+    <div class="numero"><div class="ic" style="background:var(--primaria-clara)">⏱</div><div><b>{{ r.minutos|horas }}</b><span>Tempo total</span></div></div>
+    <div class="numero"><div class="ic" style="background:var(--primaria-clara)">🗓️</div><div><b>{{ r.atendimentos }}</b><span>Atendimentos</span></div></div>
+    <div class="numero"><div class="ic" style="background:var(--primaria-clara)">≈</div><div><b>{{ r.media }} min</b><span>Média por sessão</span></div></div>
+    <div class="numero"><div class="ic" style="background:var(--primaria-clara)">🕐</div><div><b>{{ r.atraso_medio|abs }} min</b><span>{{ 'Atraso médio' if r.atraso_medio >= 0 else 'Adiantado em média' }}</span></div></div>
+  </div>
+  {% set dif = r.minutos - anterior.minutos %}
+  <p class="comparativo" style="margin-top:10px">
+    {% if anterior.minutos %}{{ 'Mais' if dif >= 0 else 'Menos' }} {{ dif|abs|horas }} que em {{ anterior.rotulo.split(' de ')[0] }} ({{ anterior.minutos|horas }}).{% else %}Sem atendimentos com check-out no mês anterior.{% endif %}
+    {% if r.planejado %} Planejado: {{ r.planejado|horas }}.{% endif %}
+  </p>
+
+  <div class="secao"><h2>Minutos por dia</h2></div>
+  <div class="cartao">
+    {% if r.minutos %}
+    <div class="grafico-barras" role="img" aria-label="Minutos atendidos por dia em {{ r.rotulo }}">
+      {% for m in r.por_dia %}<div class="{{ 'zero' if not m }} {{ 'hoje' if r.ano == hoje.year and r.mes == hoje.month and loop.index == hoje.day }}" style="height:{{ (m * 100 / maior)|round(1) if m else 2 }}%" title="Dia {{ loop.index }}: {{ m|horas }}"></div>{% endfor %}
+    </div>
+    <div class="eixo-dias"><span>1</span><span>{{ (r.por_dia|length / 2)|round|int }}</span><span>{{ r.por_dia|length }}</span></div>
+    {% else %}
+    <p style="margin:0;color:var(--apagado)">Nenhum atendimento com check-in e check-out neste mês. Use os botões ▶ Check-in e ■ Check-out na agenda.</p>
+    {% endif %}
+  </div>
+
+  {% if r.por_paciente %}
+  <div class="secao"><h2>Por paciente</h2></div>
+  <div class="cartao">
+    {% set topo = r.por_paciente[0].minutos %}
+    {% for item in r.por_paciente %}
+    <div class="barra-ind">
+      <a href="{{ url_for('paciente_detalhe', pid=item.paciente.id) }}" style="color:inherit">{{ item.paciente.nome }}</a>
+      <span class="meta">{{ item.minutos|horas }} · {{ item.sessoes }} {{ 'sessão' if item.sessoes == 1 else 'sessões' }}</span>
+      <div class="trilho"><span style="width:{{ item.minutos * 100 / topo }}%"></span></div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="secao"><h2>Outras informações</h2></div>
+  <div class="cartao detalhes"><dl>
+    <dt>Faltas</dt><dd>{{ r.faltas }}</dd>
+    <dt>Canceladas</dt><dd>{{ r.canceladas }}</dd>
+    <dt>Realizadas sem check-out</dt><dd>{{ r.sem_checkin }}{% if r.sem_checkin %} <span class="meta">(não entram no tempo total)</span>{% endif %}</dd>
+  </dl></div>
+</main>
+{% endblock %}

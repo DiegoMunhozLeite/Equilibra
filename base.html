@@ -12,8 +12,8 @@
 <meta name="robots" content="noindex">
 <title>{% block titulo %}Equilibra{% endblock %}</title>
 <link rel="manifest" href="{{ url_for('manifest') }}">
-<link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
-<link rel="icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+<link rel="icon" href="{{ url_for('static', filename='icon-192.png') }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
@@ -24,6 +24,7 @@
 <body class="{% block body_class %}{% endblock %}">
 {% if vendo_como and current_user.is_authenticated and current_user.papel == 'paciente' %}<div class="faixa-demo" role="note"><span>👀 Você está vendo o app como <b>{{ current_user.nome }}</b></span>
   <form method="post" action="{{ url_for('demo_voltar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn peq">Voltar ao terapeuta</button></form></div>{% endif %}
+{% if faltando %}<div class="msg erro" style="margin:12px 16px" role="alert"><b>Atualização incompleta:</b> {{ faltando|length }} {{ 'arquivo não chegou' if faltando|length == 1 else 'arquivos não chegaram' }} ao servidor ({{ faltando[:6]|join(', ') }}{{ '…' if faltando|length > 6 }}). Envie de novo todos os arquivos do zip para a página inicial do repositório.</div>{% endif %}
 {% if modo_avaliacao %}<div class="faixa-avaliacao" role="note">Versão de avaliação · IA simulada, sem custo · não cadastre pacientes reais</div>{% endif %}
 {% with msgs = get_flashed_messages(with_categories=true) %}
 {% if msgs %}<div class="mensagens" role="status">{% for cat, m in msgs %}<div class="msg {{ cat }}">{{ m }}</div>{% endfor %}</div>{% endif %}

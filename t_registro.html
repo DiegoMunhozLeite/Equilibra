@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div>
+  <a class="voltar" href="{{ url_for('paciente_detalhe', pid=r.paciente_id) }}">‹ {{ r.paciente.nome }}</a>
+  <h1>Sessão de {{ r.data|dia_curto }}</h1>
+</div><a class="btn sec peq" href="{{ url_for('registro_form', rid=r.id) }}">Editar</a></header>
+<main class="pagina">
+  <div class="etiquetas" style="margin-top:0">
+    <span class="tag {{ r.risco }}">Risco {{ RISCO[r.risco]|lower }}</span>
+    {% if not r.realizada %}<span class="tag faltou">Não realizada</span>{% endif %}
+    {% if r.uso_recente %}<span class="tag vermelho">Uso recente{% if r.data_uso %} em {{ r.data_uso|data_br }}{% endif %}</span>{% endif %}
+    {% if r.teste_feito %}<span class="tag {{ r.teste_resultado }}">{{ r.teste_tipo or 'Teste' }} {{ RESULTADO_TESTE.get(r.teste_resultado, 'feito')|lower }}</span>{% endif %}
+    {% if t %}<span class="tag azul">Via gravação</span>{% endif %}
+  </div>
+  <div class="cartao detalhes" style="margin-top:16px"><dl>
+    {% if r.humor %}<dt>Humor</dt><dd>{{ HUMOR[r.humor][0] }} {{ HUMOR[r.humor][1] }}</dd>{% endif %}
+    {% if r.abordagens %}<dt>Abordagens</dt><dd>{{ r.abordagens }}</dd>{% endif %}
+    {% if cons and cons.minutos_atendidos %}<dt>Atendimento</dt><dd>{{ cons.checkin_em|hora }} às {{ cons.checkout_em|hora }} · {{ cons.minutos_atendidos|horas }}</dd>{% endif %}
+  </dl></div>
+  <div class="secao"><h2>Indicadores</h2></div>
+  <div class="cartao">{% include "t__indicadores.html" %}</div>
+  {% if r.comentarios %}<div class="secao"><h2>Evolução</h2></div><div class="cartao texto-longo">{{ r.comentarios }}</div>{% endif %}
+  {% if r.tarefa_paciente %}<div class="secao"><h2>Tarefa para o paciente</h2></div><div class="cartao">{{ r.tarefa_paciente }}</div>{% endif %}
+  {% if t %}<details class="cartao" style="margin-top:12px"><summary>Transcrição ({{ (t.segundos // 60) }} min)</summary><div class="texto-longo" style="font-size:.95rem">{{ t.texto }}</div></details>{% endif %}
+
+  <div class="secao" id="ia"><h2>Feedback clínico com IA</h2></div>
+  {% if r.feedback_ia %}<div class="cartao texto-longo">{{ r.feedback_ia }}</div>{% endif %}
+  {% if ia_ativa %}
+  <form method="post" action="{{ url_for('registro_ia', rid=r.id) }}" style="margin-top:10px">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <button class="btn sec bloco">✨ {{ 'Gerar de novo' if r.feedback_ia else 'Gerar feedback clínico' }}</button>
+    <p class="meta" style="color:var(--apagado);font-size:.88rem;margin-top:6px">A IA recebe os dados da sessão sem nome, telefone ou e-mail. É uma sugestão para você revisar, não um parecer.</p>
+  </form>
+  {% else %}<div class="vazio">Configure a chave da IA no servidor para ativar o feedback clínico.</div>{% endif %}
+
+  <form method="post" action="{{ url_for('excluir_registro', rid=r.id) }}" data-confirma="Excluir este registro do prontuário? Isso não pode ser desfeito." style="margin-top:28px">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn perigo">Excluir registro</button></form>
+</main>
+{% endblock %}

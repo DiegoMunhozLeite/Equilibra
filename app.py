@@ -35,7 +35,8 @@ TZ = ZoneInfo("America/Sao_Paulo")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEV = os.environ.get("FLASK_ENV") == "development"
 
-app = Flask(__name__)
+# Todos os arquivos ficam numa pasta só (sem subpastas), para o envio pelo GitHub não desmontar a estrutura.
+app = Flask(__name__, template_folder=BASE_DIR, static_folder=None)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 db_url = os.environ.get("DATABASE_URL", "sqlite:///" + os.path.join(BASE_DIR, "equilibra.db"))
@@ -96,7 +97,13 @@ def para_float(txt, padrao=None):
 
 
 # ============================================================ constantes
-VERSAO = "v8"  # aumente a cada entrega; aparece no rodapé do app
+VERSAO = "v8.2"
+# Arquivos que precisam estar na mesma pasta do app.py. Se faltar algum, o painel avisa.
+ARQUIVOS_ESSENCIAIS = ['_icones.html', '_itens.html', '_marca.html', 'ajuda.html', 'app.py', 'apple-touch-icon.png', 'artigo.html', 'base.html', 'biblioteca.html', 'c_codigo.html', 'c_codigos.html', 'c_esqueci.html', 'c_paciente.html', 'c_privacidade.html', 'c_redefinir.html', 'c_terapeuta.html', 'c_termos.html', 'cadastro.html', 'conta.py', 'conteudo_base.py', 'convite.html', 'cripto.py', 'demo.py', 'entrar.html', 'erro.html', 'financeiro.py', 'icon-192.png', 'icon-512.png', 'manifest.webmanifest', 'offline.html', 'p_casa.html', 'p_checkin.html', 'p_diario.html', 'relatorios.py', 'respirar.html', 'style.css', 'sw.js', 't__indicadores.html', 't_agenda.html', 't_artigo_form.html', 't_consulta_form.html', 't_fim.html', 't_financeiro.html', 't_gravacao.html', 't_mood.html', 't_paciente.html', 't_paciente_form.html', 't_pacientes.html', 't_painel.html', 't_recibo.html', 't_registro.html', 't_registro_form.html', 't_registros.html', 't_relatorio.html', 't_relatorio_opcoes.html', 't_relatorio_paciente.html', 'voz.py']
+
+
+def arquivos_faltando():
+    return [f for f in ARQUIVOS_ESSENCIAIS if not os.path.exists(os.path.join(BASE_DIR, f))]  # aumente a cada entrega; aparece no rodapé do app
 HUMOR = {1: ("😞", "Muito mal"), 2: ("😔", "Mal"), 3: ("😐", "Regular"), 4: ("🙂", "Bem"), 5: ("😊", "Muito bem")}
 RISCO = {"baixo": "Baixo", "moderado": "Moderado", "alto": "Alto", "critico": "Crítico"}
 STATUS_PACIENTE = {"ativo": "Ativo", "pausado": "Pausado", "alta": "Alta", "inativo": "Inativo"}
@@ -581,7 +588,8 @@ def contexto():
                 STATUS_CONSULTA=STATUS_CONSULTA, TIPO_CONSULTA=TIPO_CONSULTA, CATEGORIAS=CATEGORIAS,
                 RESULTADO_TESTE=RESULTADO_TESTE, TIPOS_TESTE=TIPOS_TESTE, INDICADORES=INDICADORES, SUBSTANCIAS=SUBSTANCIAS, GATILHOS=GATILHOS,
                 hoje=hoje(), saudacao=saudacao, ia_ativa=voz.ia_ativa(), transcricao_ativa=voz.transcricao_ativa(),
-                modo_avaliacao=voz.modo_avaliacao(), vendo_como=session.get("demo_como"), VERSAO=VERSAO)
+                modo_avaliacao=voz.modo_avaliacao(), vendo_como=session.get("demo_como"), VERSAO=VERSAO,
+                faltando=arquivos_faltando() if current_user.is_authenticated and current_user.papel == "terapeuta" else [])
 
 
 # ============================================================ regras clínicas
@@ -644,13 +652,26 @@ def feedback_ia(r):
 # ============================================================ PWA
 @app.route("/manifest.webmanifest")
 def manifest():
-    return send_from_directory("static", "manifest.webmanifest", mimetype="application/manifest+json")
+    return send_from_directory(BASE_DIR, "manifest.webmanifest", mimetype="application/manifest+json")
 
 
 @app.route("/sw.js")
 def service_worker():
-    resp = send_from_directory("static", "sw.js", mimetype="application/javascript")
+    resp = send_from_directory(BASE_DIR, "sw.js", mimetype="application/javascript")
     resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+EXTENSOES_PUBLICAS = {".css", ".png", ".svg", ".ico", ".webmanifest"}
+
+
+@app.route("/static/<path:filename>", endpoint="static")
+def arquivo_estatico(filename):
+    nome = os.path.basename(filename)  # aceita endereços antigos como /static/icons/icon-192.png
+    if os.path.splitext(nome)[1].lower() not in EXTENSOES_PUBLICAS:
+        abort(404)  # nunca expõe código (.py) nem telas (.html)
+    resp = send_from_directory(BASE_DIR, nome)
+    resp.headers["Cache-Control"] = "public, max-age=86400"
     return resp
 
 
@@ -782,7 +803,7 @@ def painel():
     em_atendimento = (Consulta.query.filter_by(terapeuta_id=current_user.id)
                       .filter(Consulta.checkin_em.isnot(None), Consulta.checkout_em.is_(None)).all())
     mes = resumo_mes(current_user.id, hoje().year, hoje().month)
-    return render_template("terapeuta/painel.html", consultas=consultas, atencao=atencao,
+    return render_template("t_painel.html", consultas=consultas, atencao=atencao,
                            ativos=len(ativos), recentes=recentes, n_recentes=n_recentes,
                            tem_demo=tem_demo, total_pacientes=total, estoques=lista_estoque,
                            baixos=[e for e in lista_estoque if e.quantidade < e.minimo and e.minimo > 0],
@@ -842,7 +863,7 @@ def pacientes():
         consulta = consulta.filter(Paciente.nome.ilike(f"%{q}%"))
     if st in STATUS_PACIENTE:
         consulta = consulta.filter_by(status=st)
-    return render_template("terapeuta/pacientes.html", lista=consulta.order_by(Paciente.nome).all(), q=q, st=st)
+    return render_template("t_pacientes.html", lista=consulta.order_by(Paciente.nome).all(), q=q, st=st)
 
 
 def salvar_paciente(p, f):
@@ -892,7 +913,7 @@ def paciente_form(pid=None):
             db.session.commit()
             flash("Paciente salvo.", "ok")
             return redirect(url_for("paciente_detalhe", pid=p.id))
-    return render_template("terapeuta/paciente_form.html", p=p)
+    return render_template("t_paciente_form.html", p=p)
 
 
 @app.route("/t/pacientes/<int:pid>")
@@ -908,7 +929,7 @@ def paciente_detalhe(pid):
     feitas, prox = p.conquistas()
     pontos = [(c.data, c.fissura) for c in checkins] + [(r.data, r.fissura) for r in registros]
     link = url_for("convite", codigo=p.codigo_convite, _external=True) if p.codigo_convite and not p.tem_acesso else None
-    return render_template("terapeuta/paciente.html", p=p, registros=registros[:10], checkins=checkins[:7],
+    return render_template("t_paciente.html", p=p, registros=registros[:10], checkins=checkins[:7],
                            proximas=proximas, pagamentos=pagamentos, feitas=feitas, prox=prox,
                            grafico=serie_diaria(pontos), saldo=p.saldo_sessoes(), link=link, motivos=alertas(p),
                            consentimento=consentimento_ativo(p),
@@ -962,7 +983,7 @@ def agenda():
                  .order_by(Consulta.inicio).all())
     com_consulta = {c.inicio.date() for c in consultas if c.status != "cancelada"}
     do_dia = [c for c in consultas if c.inicio.date() == dia]
-    return render_template("terapeuta/agenda.html", dia=dia, semana=semana, do_dia=do_dia,
+    return render_template("t_agenda.html", dia=dia, semana=semana, do_dia=do_dia,
                            com_consulta=com_consulta, anterior=segunda - timedelta(days=7),
                            proxima=segunda + timedelta(days=7))
 
@@ -1017,7 +1038,7 @@ def consulta_form(cid=None):
             flash(f"{criadas} sessões agendadas." if criadas > 1 else "Sessão salva.", "ok")
             return redirect(url_for("agenda", dia=c.inicio.date().isoformat()))
     padrao = c.inicio or datetime.combine(para_data(request.args.get("dia")) or hoje(), datetime.min.time()).replace(hour=9)
-    return render_template("terapeuta/consulta_form.html", c=c, pacientes=lista, padrao=padrao)
+    return render_template("t_consulta_form.html", c=c, pacientes=lista, padrao=padrao)
 
 
 @app.route("/t/agenda/<int:cid>/excluir", methods=["POST"])
@@ -1127,7 +1148,7 @@ def relatorio():
     anterior = resumo_mes(current_user.id, ant_ano, ant_mes)
     prox = (ano + 1, 1) if mes == 12 else (ano, mes + 1)
     maior = max(atual["por_dia"] + [1])
-    return render_template("terapeuta/relatorio.html", r=atual, anterior=anterior, maior=maior,
+    return render_template("t_relatorio.html", r=atual, anterior=anterior, maior=maior,
                            link_ant=f"{ant_ano}-{ant_mes:02d}", link_prox=f"{prox[0]}-{prox[1]:02d}",
                            e_futuro=(prox[0], prox[1]) > (hoje().year, hoje().month))
 
@@ -1173,7 +1194,7 @@ def registros():
         consulta = consulta.filter(Registro.risco == risco)
     ativos = Paciente.query.filter_by(terapeuta_id=current_user.id, status="ativo").all()
     atencao = [(p, m) for p in ativos if (m := alertas(p))]
-    return render_template("terapeuta/registros.html", lista=consulta.order_by(Registro.data.desc(), Registro.id.desc()).limit(100).all(),
+    return render_template("t_registros.html", lista=consulta.order_by(Registro.data.desc(), Registro.id.desc()).limit(100).all(),
                            q=q, risco=risco, atencao=atencao)
 
 
@@ -1254,7 +1275,7 @@ def registro_form(cid=None, pid=None, rid=None):
     if not r.id and not r.teste_tipo and paciente.tipo_teste in TIPOS_TESTE:
         r.teste_tipo = paciente.tipo_teste
     evid = (t.dados.get("evidencias") or {}) if t else {}
-    return render_template("terapeuta/registro_form.html", r=r, p=paciente, t=t, cons=cons, evid=evid,
+    return render_template("t_registro_form.html", r=r, p=paciente, t=t, cons=cons, evid=evid,
                            estoque_por_tipo={e.tipo: e.quantidade for e in estoques(current_user)})
 
 
@@ -1265,7 +1286,7 @@ def registro_detalhe(rid):
     registrar_acesso(r.paciente_id, "abriu registro de sessão")
     t = Transcricao.query.filter_by(registro_id=r.id).first()
     cons = db.session.get(Consulta, r.consulta_id) if r.consulta_id else None
-    return render_template("terapeuta/registro.html", r=r, t=t, cons=cons)
+    return render_template("t_registro.html", r=r, t=t, cons=cons)
 
 
 @app.route("/t/registros/<int:rid>/ia", methods=["POST"])
@@ -1369,7 +1390,7 @@ def fim_sessao():
         agora_ = agora()
         passadas = [c for c in sem_registro if c.inicio <= agora_]
         sel_c = (passadas[0] if passadas else sem_registro[-1]).id
-    return render_template("terapeuta/fim.html", sem_registro=sem_registro, pacientes=lista, pendentes=pendentes,
+    return render_template("t_fim.html", sem_registro=sem_registro, pacientes=lista, pendentes=pendentes,
                            consentidos=consentidos, sel_c=sel_c, sel_p=sel_p)
 
 
@@ -1490,7 +1511,7 @@ def gravacao_ver(tid):
         destino = url_for("registro_form", cid=t.consulta_id, transcricao=t.id)
     else:
         destino = url_for("registro_form", pid=t.paciente_id, transcricao=t.id)
-    return render_template("terapeuta/gravacao.html", t=t, destino=destino)
+    return render_template("t_gravacao.html", t=t, destino=destino)
 
 
 @app.route("/t/gravacao/<int:tid>/excluir", methods=["POST"])
@@ -1529,7 +1550,7 @@ def mood():
     total = len(todos)
     media = round(sum(h for _, h in todos) / total, 1) if total else None
     linha = serie_diaria([(d, (h - 1) * 2.5) for d, h in todos], dias=periodo)
-    return render_template("terapeuta/mood.html", contagem=contagem, total=total, media=media, linha=linha,
+    return render_template("t_mood.html", contagem=contagem, total=total, media=media, linha=linha,
                            pacientes=lista, pid=pid, periodo=periodo)
 
 
@@ -1554,7 +1575,7 @@ def artigo_form(aid=None):
             db.session.commit()
             flash("Conteúdo salvo.", "ok")
             return redirect(url_for("artigo", aid=a.id))
-    return render_template("terapeuta/artigo_form.html", a=a)
+    return render_template("t_artigo_form.html", a=a)
 
 
 # ============================================================ paciente
@@ -1569,7 +1590,7 @@ def casa():
               .order_by(Registro.data.desc(), Registro.id.desc()).first())
     cks = CheckIn.query.filter_by(paciente_id=p.id).order_by(CheckIn.data.desc()).limit(30).all()
     feitas, prox = p.conquistas()
-    return render_template("paciente/casa.html", ck=ck, proximas=proximas, tarefa=tarefa, feitas=feitas, prox=prox,
+    return render_template("p_casa.html", ck=ck, proximas=proximas, tarefa=tarefa, feitas=feitas, prox=prox,
                            recentes=cks[:5], grafico=serie_diaria([(c.data, c.fissura) for c in cks]),
                            saldo=p.saldo_sessoes() if p.valor_sessao or Pagamento.query.filter_by(paciente_id=p.id).first() else None)
 
@@ -1603,7 +1624,7 @@ def checkin():
         else:
             flash("Check-in salvo.", "ok")
         return redirect(url_for("casa"))
-    return render_template("paciente/checkin.html", ck=ck)
+    return render_template("p_checkin.html", ck=ck)
 
 
 @app.route("/p/diario")
@@ -1614,7 +1635,7 @@ def diario():
                  .filter(Consulta.status == "agendada").order_by(Consulta.inicio).limit(5).all())
     tarefas = (Registro.query.filter_by(paciente_id=current_user.id).filter(Registro.tarefa_paciente.isnot(None))
                .order_by(Registro.data.desc()).limit(10).all())
-    return render_template("paciente/diario.html", checkins=cks[:30], consultas=consultas, tarefas=tarefas,
+    return render_template("p_diario.html", checkins=cks[:30], consultas=consultas, tarefas=tarefas,
                            grafico=serie_diaria([(c.data, c.fissura) for c in cks]))
 
 

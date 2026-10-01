@@ -106,11 +106,16 @@ A versão em uso aparece no rodapé de todas as telas. Ela é definida em `VERSA
 | v5 | Visual branco, testes Multi 1 a 12 com estoque por tipo, 10 indicadores, revisão da transcrição com prova da IA, check-in e check-out, relatório mensal, ver como paciente |
 | v6 | Número da versão no rodapé do app |
 | v7 | Versões de bibliotecas travadas e inicialização segura do servidor (corrige falha de build) |
+| v8.2 | Todos os arquivos numa pasta só (o envio pelo GitHub não desmonta mais a estrutura) e aviso de arquivo faltando |
 | v8 | Área financeira, evolução dos indicadores, relatório em PDF, sessões recorrentes, recibos, criptografia dos dados clínicos, verificação em duas etapas, recuperação de senha, registro de acessos, saída por inatividade, exportação e exclusão de dados (LGPD), termos e privacidade |
 
 ## Arquivos
 
+Desde a v8.2, **todos os arquivos ficam numa pasta só, sem subpastas**. Para atualizar, selecione tudo (Ctrl + A) e arraste para a página inicial do repositório no GitHub. Se algum arquivo não chegar, o painel do terapeuta mostra um aviso com o nome dele.
+
 - `app.py`: rotas, modelos e regras
-- `voz.py`: transcrição, anonimização e resumo por IA
-- `conteudo_base.py`: textos iniciais da biblioteca (revise antes de liberar aos pacientes)
-- `templates/`, `static/`: telas, estilo, ícones, manifest e service worker
+- `financeiro.py`, `conta.py`, `relatorios.py`, `voz.py`, `cripto.py`, `demo.py`: módulos
+- `t_*.html`: telas do terapeuta · `p_*.html`: telas do paciente · `c_*.html`: conta e LGPD · demais `.html`: telas comuns
+- `style.css`, `sw.js`, `manifest.webmanifest`, `*.png`: visual, app instalável e ícones
+
+As pastas antigas `templates` e `static` no GitHub não são mais usadas e podem ser apagadas.

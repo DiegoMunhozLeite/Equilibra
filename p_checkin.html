@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div><h1>Como você está hoje?</h1><div class="sub">Leva um minuto. Seu terapeuta acompanha.</div></div></header>
+<main class="pagina">
+<form method="post">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="campo" style="margin-top:0"><span class="rot">Humor</span>
+    <div class="escolhas humor">{% for n in [1,2,3,4,5] %}<label><input type="radio" name="humor" value="{{ n }}" required {{ 'checked' if ck and ck.humor == n }}><span><em>{{ HUMOR[n][0] }}</em>{{ HUMOR[n][1] }}</span></label>{% endfor %}</div></div>
+  <div class="campo deslizador"><label for="fissura">Vontade de usar: <output id="fissura-v"></output></label>
+    <input id="fissura" name="fissura" type="range" min="0" max="10" value="{{ ck.fissura if ck else 0 }}">
+    <div class="eixo" style="display:flex;justify-content:space-between;color:var(--apagado);font-size:.85rem"><span>nenhuma</span><span>muito forte</span></div></div>
+  <div class="campo"><span class="rot">Como dormiu?</span>
+    <div class="escolhas">{% for n, rot in [(1,'Muito mal'),(2,'Mal'),(3,'Mais ou menos'),(4,'Bem'),(5,'Muito bem')] %}<label><input type="radio" name="sono" value="{{ n }}" {{ 'checked' if ck and ck.sono == n }}><span>{{ rot }}</span></label>{% endfor %}</div></div>
+  <div class="campo"><span class="rot">O que pesou hoje?</span>
+    {% set marcados = (ck.gatilhos or '').split(', ') if ck else [] %}
+    <div class="escolhas">{% for g in GATILHOS %}<label><input type="checkbox" name="gatilhos" value="{{ g }}" {{ 'checked' if g in marcados }}><span>{{ g }}</span></label>{% endfor %}</div></div>
+  <label class="alternar"><span>Usei alguma substância hoje</span><input type="checkbox" name="usou" value="1" {{ 'checked' if ck and ck.usou }}></label>
+  <p class="meta" style="color:var(--apagado);font-size:.88rem;margin-top:6px">Ser honesto aqui ajuda seu tratamento. Ninguém vai julgar você.</p>
+  <div class="campo"><label for="nota">Quer contar algo?</label><textarea id="nota" name="nota" rows="4" placeholder="Opcional">{{ ck.nota if ck and ck.nota else '' }}</textarea></div>
+  <button class="btn bloco" style="margin-top:20px">Salvar check-in</button>
+</form>
+</main>
+{% endblock %}

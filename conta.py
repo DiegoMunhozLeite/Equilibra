@@ -98,7 +98,7 @@ def entrar_codigo():
             session["ultimo_uso"] = datetime.now().timestamp()
             return redirect(url_for("painel"))
         flash("Código incorreto. Confira o app autenticador e tente de novo.", "erro")
-    return render_template("conta/codigo.html")
+    return render_template("c_codigo.html")
 
 
 # ---------------------------------------------------------------- esqueci minha senha
@@ -117,7 +117,7 @@ def esqueci():
             except Exception:
                 pass  # não revela se o e-mail existe nem se o envio falhou
         enviado = True
-    return render_template("conta/esqueci.html", enviado=enviado, email_ok=email_configurado())
+    return render_template("c_esqueci.html", enviado=enviado, email_ok=email_configurado())
 
 
 @app.route("/redefinir/<token>", methods=["GET", "POST"])
@@ -135,7 +135,7 @@ def redefinir(token):
             db.session.commit()
             flash("Senha alterada. Entre com a nova senha.", "ok")
             return redirect(url_for("entrar"))
-    return render_template("conta/redefinir.html", u=u)
+    return render_template("c_redefinir.html", u=u)
 
 
 @app.route("/t/pacientes/<int:pid>/link-senha", methods=["POST"])
@@ -197,7 +197,7 @@ def conta_terapeuta():
                 t.codigos_recuperacao = "|".join(generate_password_hash(c) for c in codigos)
                 db.session.commit()
                 session.pop("totp_novo", None)
-                return render_template("conta/codigos.html", codigos=codigos)
+                return render_template("c_codigos.html", codigos=codigos)
             flash("Código incorreto. Confira se o horário do celular está automático e tente de novo.", "erro")
         elif acao == "2fa_desligar":
             if conferir_senha(t, f.get("atual", "")):
@@ -214,7 +214,7 @@ def conta_terapeuta():
               "segredo": session["totp_novo"], "uri": uri}
     acessos = Acesso.query.filter_by(terapeuta_id=t.id).order_by(Acesso.quando.desc()).limit(15).all()
     nomes = {p.id: p.nome for p in Paciente.query.filter_by(terapeuta_id=t.id)}
-    return render_template("conta/terapeuta.html", qr=qr, acessos=acessos, nomes=nomes,
+    return render_template("c_terapeuta.html", qr=qr, acessos=acessos, nomes=nomes,
                            restantes=len(t.codigos_recuperacao.split("|")) if t.codigos_recuperacao else 0)
 
 
@@ -234,7 +234,7 @@ def conta_paciente():
             db.session.commit()
             flash("Senha alterada.", "ok")
         return redirect(url_for("conta_paciente"))
-    return render_template("conta/paciente.html")
+    return render_template("c_paciente.html")
 
 
 # ---------------------------------------------------------------- LGPD: exportar e excluir
@@ -334,9 +334,9 @@ def excluir_paciente(pid):
 # ---------------------------------------------------------------- termos e privacidade
 @app.route("/termos")
 def termos():
-    return render_template("conta/termos.html")
+    return render_template("c_termos.html")
 
 
 @app.route("/privacidade")
 def privacidade():
-    return render_template("conta/privacidade.html")
+    return render_template("c_privacidade.html")
