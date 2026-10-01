@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div><a class="voltar" href="{{ url_for('admin_painel') }}">‹ Painel da plataforma</a><h1>{{ a.nome_conta }}</h1>
+  <div class="sub">{{ 'Clínica' if a.e_clinica else 'Autônomo' }}{% if dono %} · {{ dono.email }}{% endif %}</div></div></header>
+<main class="pagina">
+  <div class="cartao detalhes"><dl>
+    <dt>Status</dt><dd>{{ STATUS_ASSINATURA[a.status] }}</dd>
+    <dt>Plano</dt><dd>{{ a.plano.nome }} · {{ 'anual' if a.ciclo == 'anual' else 'mensal' }}</dd>
+    {% if a.e_clinica %}<dt>Terapeutas</dt><dd>{{ a.terapeutas }} (cobrando {{ a.assentos_cobrados }})</dd>{% endif %}
+    <dt>Receita mensal</dt><dd>{{ a.valor_mensal()|moeda }}</dd>
+    <dt>Criada em</dt><dd>{{ a.criada_em|data_br }}</dd>
+    {% if a.teste_ate %}<dt>Teste até</dt><dd>{{ a.teste_ate|data_br }}</dd>{% endif %}
+    {% if a.inicio_pago %}<dt>Pagante desde</dt><dd>{{ a.inicio_pago|data_br }}</dd>{% endif %}
+    {% if a.proxima_cobranca %}<dt>Próxima cobrança</dt><dd>{{ a.proxima_cobranca|data_br }}</dd>{% endif %}
+    {% if u %}<dt>Uso</dt><dd>{{ u.pacientes }} pacientes · {{ u.minutos }} min de IA no mês</dd>{% endif %}
+  </dl></div>
+
+  <div class="secao"><h2>Ações</h2></div>
+  <div class="cartao">
+    <form method="post" class="duas" style="align-items:end"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="plano">
+      <div class="campo" style="margin-top:0"><label for="plano_id">Plano</label><select id="plano_id" name="plano_id">{% for p in planos %}<option value="{{ p.id }}" {{ 'selected' if p.id == a.plano_id }}>{{ p.nome }} ({{ 'clínica' if p.publico == 'clinica' else 'autônomo' }})</option>{% endfor %}</select></div>
+      <button class="btn sec">Trocar plano</button></form>
+    <form method="post" class="duas" style="align-items:end;margin-top:10px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="estender">
+      <div class="campo" style="margin-top:0"><label for="dias">Dias de teste a mais</label><input id="dias" name="dias" type="number" min="1" max="365" value="14"></div>
+      <button class="btn sec">Estender teste</button></form>
+    <div class="acoes">
+      {% for acao, rot in [('ativar','Ativar assinatura'),('cortesia','Dar cortesia'),('cancelar','Cancelar')] %}
+      <form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="{{ acao }}"><button class="btn {{ 'perigo' if acao == 'cancelar' else 'sec' }} peq">{{ rot }}</button></form>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="secao"><h2>Cobranças</h2></div>
+  <div class="cartao">{% for c in cobrancas %}
+    <div class="lancamento"><div class="meio"><b>{{ c.valor|moeda }}</b><div class="meta">Vencimento {{ c.vencimento|data_br }}{% if c.pago_em %} · pago em {{ c.pago_em|data_br }}{% endif %}</div></div>
+      {% if c.status == 'pendente' %}<form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="pagar"><input type="hidden" name="cobranca" value="{{ c.id }}"><button class="btn peq">Marcar paga</button></form>
+      {% else %}<span class="tag {{ 'verde' if c.status == 'paga' else 'inativo' }}">{{ 'Paga' if c.status == 'paga' else 'Cancelada' }}</span>{% endif %}</div>
+  {% else %}<p class="meta" style="margin:0;color:var(--apagado)">Nenhuma cobrança.</p>{% endfor %}</div>
+</main>
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div><a class="voltar" href="{{ url_for('minha_assinatura') }}">‹ Assinatura</a><h1>Escolher plano</h1></div></header>
+<main class="pagina">
+<form method="post" id="form-plano">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="campo" style="margin-top:0"><span class="rot">Plano</span>
+    {% for p in opcoes %}
+    <label class="cartao plano-opcao" style="display:block;cursor:pointer;margin-top:8px">
+      <div class="linha-item"><input type="radio" name="plano" value="{{ p.codigo }}" data-mensal="{{ p.preco_mensal }}" data-anual="{{ p.preco_anual(1) }}" data-minimo="{{ p.minimo_terapeutas or 1 }}" {{ 'checked' if p.codigo == escolhido or (loop.first and escolhido not in (opcoes|map(attribute='codigo')|list)) }} style="width:22px;height:22px">
+        <div class="meio"><b>{{ p.nome }}</b><div class="meta">{{ p.preco_mensal|moeda }}/mês{{ ' por terapeuta' if p.publico == 'clinica' }} · {{ p.lista_recursos[:2]|join(' · ') }}</div></div></div>
+    </label>
+    {% endfor %}</div>
+  <div class="campo"><span class="rot">Ciclo</span>
+    <div class="escolhas"><label><input type="radio" name="ciclo" value="mensal" {{ 'checked' if a.ciclo != 'anual' }}><span>Mensal</span></label>
+      <label><input type="radio" name="ciclo" value="anual" {{ 'checked' if a.ciclo == 'anual' }}><span>Anual (com desconto)</span></label></div></div>
+  {% if a.e_clinica %}
+  <div class="campo"><label for="assentos">Número de terapeutas</label><input id="assentos" name="assentos" type="number" min="1" max="500" value="{{ a.assentos_cobrados }}" inputmode="numeric">
+    <div class="ajuda">A clínica tem {{ a.terapeutas }} {{ 'terapeuta' if a.terapeutas == 1 else 'terapeutas' }} hoje. O plano tem um mínimo de terapeutas cobrados.</div></div>
+  {% endif %}
+  <div class="campo"><span class="rot">Forma de pagamento</span>
+    <div class="escolhas">{% for k, v in METODOS.items() %}<label><input type="radio" name="metodo" value="{{ k }}" {{ 'checked' if loop.first }}><span>{{ v }}</span></label>{% endfor %}</div></div>
+  <div class="cartao" style="margin-top:16px;background:var(--primaria-clara);border-color:var(--primaria-media)">
+    <div class="linha-item"><div class="meio">Total</div><b id="total" style="font-size:1.3rem">—</b></div>
+    <div class="meta" id="detalhe" style="color:var(--apagado)"></div></div>
+  <div class="aviso-caixa" style="margin-top:12px">Pagamento simulado: nenhum dado de cartão é pedido e nada é cobrado. Na versão com cobrança real, o pagamento acontece numa página segura do serviço de pagamentos.</div>
+  <button class="btn bloco" style="margin-top:16px">Confirmar assinatura</button>
+</form>
+</main>
+{% endblock %}
+{% block scripts %}
+<script nonce="{{ csp_nonce() }}">
+(function () {
+  var f = document.getElementById('form-plano');
+  function brl(v) { return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
+  function calc() {
+    var p = f.querySelector('input[name=plano]:checked'); if (!p) return;
+    var anual = f.querySelector('input[name=ciclo]:checked').value === 'anual';
+    var s = f.querySelector('#assentos'), n = s ? Math.max(parseInt(s.value || '1', 10), parseInt(p.dataset.minimo, 10)) : 1;
+    var v = (anual ? parseFloat(p.dataset.anual) : parseFloat(p.dataset.mensal)) * n;
+    document.getElementById('total').textContent = brl(v) + (anual ? ' por ano' : ' por mês');
+    document.getElementById('detalhe').textContent = (s ? n + ' terapeutas · ' : '') + (anual ? 'equivale a ' + brl(v / 12) + ' por mês' : 'renova todo mês');
+  }
+  f.addEventListener('input', calc); f.addEventListener('change', calc); calc();
+})();
+</script>
+{% endblock %}

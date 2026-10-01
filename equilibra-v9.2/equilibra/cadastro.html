@@ -1,0 +1,47 @@
+{% extends "base.html" %}{% block body_class %}sem-barra{% endblock %}
+{% block scripts %}
+<script nonce="{{ csp_nonce() }}">
+document.querySelectorAll('[data-tipo]').forEach(function (r) { r.addEventListener('change', function () {
+  var c = document.querySelector('[data-tipo][value=clinica]').checked;
+  document.getElementById('campo-clinica').hidden = !c; document.getElementById('campo-plano').hidden = c; }); });
+</script>
+{% endblock %}
+{% block titulo %}Criar conta · Equilibra{% endblock %}
+{% block conteudo %}
+<main class="auth">
+  {% include "_marca.html" %}
+  <h1>Criar conta de terapeuta</h1>
+  <form method="post">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    {% if convite_clinica %}
+    <input type="hidden" name="clinica" value="{{ request.values.clinica }}">
+    <div class="cartao" style="background:var(--primaria-clara);border-color:var(--primaria-media)">Você foi convidado para a equipe da <b>{{ convite_clinica.nome }}</b>.</div>
+    {% else %}
+    <div class="campo"><span class="rot">Tipo de conta</span>
+      <div class="escolhas"><label><input type="radio" name="tipo_conta" value="autonomo" data-tipo {{ 'checked' if request.values.tipo != 'clinica' }}><span>Terapeuta autônomo</span></label>
+        <label><input type="radio" name="tipo_conta" value="clinica" data-tipo {{ 'checked' if request.values.tipo == 'clinica' }}><span>Clínica ou equipe</span></label></div></div>
+    <div class="campo" id="campo-clinica" {{ 'hidden' if request.values.tipo != 'clinica' }}><label for="nome_clinica">Nome da clínica</label><input id="nome_clinica" name="nome_clinica" type="text" value="{{ request.form.nome_clinica }}"></div>
+    <div class="campo" id="campo-plano" {{ 'hidden' if request.values.tipo == 'clinica' }}><label for="plano">Plano para testar</label>
+      <select id="plano" name="plano">{% for p in planos if p.publico == 'autonomo' %}<option value="{{ p.codigo }}" {{ 'selected' if p.codigo == plano_escolhido or (not plano_escolhido and p.destaque) }}>{{ p.nome }} · {{ p.preco_mensal|moeda }}/mês</option>{% endfor %}</select>
+      <div class="ajuda">Teste grátis, sem cartão. <a href="{{ url_for('planos_publicos') }}">Comparar planos</a></div></div>
+    {% endif %}
+    <div class="campo"><label for="nome">Como quer ser chamado(a)</label>
+      <input id="nome" name="nome" type="text" autocomplete="given-name" required value="{{ request.form.nome }}"></div>
+    <div class="campo"><label for="email">E-mail</label>
+      <input id="email" name="email" type="email" autocomplete="username" autocapitalize="off" required value="{{ request.form.email }}"></div>
+    <div class="campo"><label for="senha">Senha</label>
+      <input id="senha" name="senha" type="password" autocomplete="new-password" minlength="8" required>
+      <div class="ajuda">Pelo menos 8 caracteres.</div></div>
+    <div class="campo"><label for="confirma">Confirme a senha</label>
+      <input id="confirma" name="confirma" type="password" autocomplete="new-password" minlength="8" required></div>
+    {% if exige_codigo %}
+    <div class="campo"><label for="codigo">Código de cadastro</label>
+      <input id="codigo" name="codigo" type="text" autocapitalize="off" required>
+      <div class="ajuda">Fornecido por quem administra este app.</div></div>
+    {% endif %}
+    <p class="meta" style="color:var(--apagado);font-size:.85rem;margin-top:16px">Ao criar a conta, você concorda com os <a href="{{ url_for('termos') }}">termos de uso</a> e a <a href="{{ url_for('privacidade') }}">política de privacidade</a>.</p>
+    <button class="btn bloco" style="margin-top:12px">Criar conta</button>
+  </form>
+  <p style="margin-top:24px"><a href="{{ url_for('entrar') }}">Já tenho conta</a></p>
+</main>
+{% endblock %}

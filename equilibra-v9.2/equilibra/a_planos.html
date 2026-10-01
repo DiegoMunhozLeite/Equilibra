@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div><a class="voltar" href="{{ url_for('admin_painel') }}">‹ Painel da plataforma</a><h1>Planos e preços</h1><div class="sub">Valores de exemplo. Ajuste e salve.</div></div></header>
+<main class="pagina">
+<form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  {% for p in planos %}{% set k = 'p' ~ p.id ~ '_' %}
+  <div class="cartao" style="margin-top:12px">
+    <div class="linha-item"><b class="meio">{{ 'Clínica (preço por terapeuta)' if p.publico == 'clinica' else 'Autônomo' }}</b><span class="tag">{{ p.codigo }}</span></div>
+    <div class="duas">
+      <div class="campo"><label for="{{ k }}nome">Nome</label><input id="{{ k }}nome" name="{{ k }}nome" type="text" value="{{ p.nome }}"></div>
+      <div class="campo"><label for="{{ k }}preco">Preço mensal (R$)</label><input id="{{ k }}preco" name="{{ k }}preco" type="text" inputmode="decimal" value="{{ ('%.2f'|format(p.preco_mensal)).replace('.', ',') }}"></div>
+    </div>
+    <div class="duas">
+      <div class="campo"><label for="{{ k }}gratis">Meses grátis no anual</label><input id="{{ k }}gratis" name="{{ k }}gratis" type="number" min="0" max="11" value="{{ p.meses_gratis_anual }}"></div>
+      <div class="campo"><label for="{{ k }}limite">Limite de pacientes</label><input id="{{ k }}limite" name="{{ k }}limite" type="number" min="1" placeholder="ilimitado" value="{{ p.limite_pacientes or '' }}"></div>
+    </div>
+    <div class="duas">
+      <div class="campo"><label for="{{ k }}minutos">Minutos de IA por mês{{ ' (por terapeuta)' if p.publico == 'clinica' }}</label><input id="{{ k }}minutos" name="{{ k }}minutos" type="number" min="0" value="{{ p.minutos_ia }}"></div>
+      <div class="campo"><label for="{{ k }}minimo">Mínimo de terapeutas</label><input id="{{ k }}minimo" name="{{ k }}minimo" type="number" min="1" value="{{ p.minimo_terapeutas }}"></div>
+    </div>
+    <div class="campo"><label for="{{ k }}recursos">Recursos (um por linha)</label><textarea id="{{ k }}recursos" name="{{ k }}recursos" rows="4">{{ p.recursos }}</textarea></div>
+    <label class="alternar"><span>Disponível para venda</span><input type="checkbox" name="{{ k }}ativo" value="1" {{ 'checked' if p.ativo }}></label>
+    <label class="alternar"><span>Destacar como “mais escolhido”</span><input type="checkbox" name="{{ k }}destaque" value="1" {{ 'checked' if p.destaque }}></label>
+  </div>
+  {% endfor %}
+  <button class="btn bloco" style="margin-top:16px">Salvar planos</button>
+</form>
+</main>
+{% endblock %}

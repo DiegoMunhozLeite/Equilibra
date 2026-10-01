@@ -1,0 +1,46 @@
+services:
+  - type: web
+    name: equilibra
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    healthCheckPath: /saude
+    startCommand: gunicorn app:app --preload --workers 2 --threads 4 --timeout 180 --bind 0.0.0.0:$PORT
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: CHAVE_DADOS
+        generateValue: true
+      - key: INATIVIDADE_MIN
+        value: "60"
+      - key: ENDERECO_APP
+        value: https://equilibra-jdcw.onrender.com
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORTA
+        value: "587"
+      - key: SMTP_USUARIO
+        sync: false
+      - key: SMTP_SENHA
+        sync: false
+      - key: EMAIL_REMETENTE
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.12.4
+      - key: DATABASE_URL
+        fromDatabase:
+          name: equilibra-db
+          property: connectionString
+      - key: MODO_AVALIACAO
+        value: "1"
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: CODIGO_CADASTRO
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+databases:
+  - name: equilibra-db
+    plan: basic-256mb

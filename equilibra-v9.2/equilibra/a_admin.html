@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% import "_icones.html" as ic %}
+{% block conteudo %}
+<header class="topo"><div><a class="voltar" href="{{ url_for('painel') }}">‹ Início</a><h1>Painel da plataforma</h1><div class="sub">Licenças vendidas, receita e contas</div></div></header>
+<main class="pagina">
+  <nav class="filtros" aria-label="Seções"><a class="ativo" href="{{ url_for('admin_painel') }}">Visão geral</a><a href="{{ url_for('admin_simulador') }}">Simulador de receita</a><a href="{{ url_for('admin_planos') }}">Planos e preços</a><a href="{{ url_for('planos_publicos') }}">Página de planos</a></nav>
+  <div class="numeros">
+    <div class="numero largo fin-numero"><div class="ic" aria-hidden="true">{{ ic.tendencia() }}</div><div><b>{{ mrr|moeda }}</b><span>Receita recorrente mensal (MRR) · {{ arr|moeda }} por ano</span></div></div>
+    <div class="numero fin-numero"><div class="ic" aria-hidden="true">{{ ic.pessoa() }}</div><div><b>{{ autonomos }}</b><span>Autônomos pagantes</span></div></div>
+    <div class="numero fin-numero"><div class="ic" aria-hidden="true">{{ ic.clinica() }}</div><div><b>{{ clinicas }}</b><span>Clínicas pagantes</span></div></div>
+    <div class="numero fin-numero"><div class="ic" aria-hidden="true">{{ ic.pessoas() }}</div><div><b>{{ terapeutas_pagantes }}</b><span>Terapeutas com licença</span></div></div>
+    <div class="numero fin-numero"><div class="ic" aria-hidden="true">{{ ic.media() }}</div><div><b>{{ ticket|moeda }}</b><span>Ticket médio por conta</span></div></div>
+    <div class="numero fin-numero"><div class="ic" aria-hidden="true">{{ ic.ciclo() }}</div><div><b>{{ conversao ~ '%' if conversao is not none else '—' }}</b><span>Conversão do teste</span></div></div>
+    <div class="numero fin-numero"><div class="ic alerta" aria-hidden="true">{{ ic.queda() }}</div><div><b>{{ churn }}%</b><span>Cancelamentos (30 dias)</span></div></div>
+  </div>
+  {% if em_aberto %}<div class="aviso-caixa" style="margin-top:12px">{{ em_aberto|moeda }} em cobranças vencidas e não pagas ({{ n.atrasada }} {{ 'conta' if n.atrasada == 1 else 'contas' }} em atraso).</div>{% endif %}
+
+  <div class="secao"><h2>Receita recebida</h2><span class="meta">6 meses</span></div>
+  <div class="cartao">
+    <div class="barras-mes" role="img" aria-label="Receita recebida por mês">
+      {% for x in serie %}<div class="mes"><div class="par"><span class="rec" style="width:60%;max-width:34px;height:{{ (x.valor * 100 / maior)|round(1) }}%" title="{{ x.valor|moeda }}"></span></div><small>{{ x.rotulo }}</small></div>{% endfor %}
+    </div>
+    <div class="legenda"><span>Último mês: {{ serie[-1].valor|moeda }}</span></div>
+  </div>
+
+  <div class="secao"><h2>Contas</h2></div>
+  <nav class="filtros" aria-label="Filtrar contas">
+    <a class="{{ 'ativo' if not filtro }}" href="{{ url_for('admin_painel') }}">Todas</a>
+    {% for k, v in STATUS_ASSINATURA.items() %}{% if n[k] %}<a class="{{ 'ativo' if filtro == k }}" href="{{ url_for('admin_painel', status=k) }}">{{ v }} ({{ n[k] }})</a>{% endif %}{% endfor %}
+  </nav>
+  <div class="cartao">
+    {% for a in lista %}
+    <a class="lancamento" href="{{ url_for('admin_conta', aid=a.id) }}" style="color:inherit">
+      <div class="avatar" style="width:38px;height:38px;font-size:1rem">{{ '🏥' if a.e_clinica else a.nome_conta[0] }}</div>
+      <div class="meio"><b>{{ a.nome_conta }}</b>
+        <div class="meta">{{ a.plano.nome }}{% if a.e_clinica %} · {{ a.terapeutas }} terapeutas{% endif %} · {% if a.status == 'teste' %}teste até {{ a.teste_ate|data_br }}{% elif a.proxima_cobranca %}próx. {{ a.proxima_cobranca|data_br }}{% else %}desde {{ a.criada_em|data_br }}{% endif %}</div></div>
+      <div style="text-align:right"><span class="tag {{ 'verde' if a.status in ['ativa','cortesia'] else 'azul' if a.status == 'teste' else 'ambar' if a.status == 'atrasada' else 'vermelho' }}">{{ STATUS_ASSINATURA[a.status] }}</span>
+        {% if a.valor_mensal() %}<div class="meta" style="margin-top:4px">{{ a.valor_mensal()|moeda }}/mês</div>{% endif %}</div>
+    </a>
+    {% else %}<p class="meta" style="margin:0;color:var(--apagado)">Nenhuma conta {{ 'neste status' if filtro }}.</p>{% endfor %}
+  </div>
+
+  <div class="cartao" style="margin-top:24px">
+    {% if tem_demo %}
+    <b>Contas de demonstração ativas</b><p class="meta" style="color:var(--apagado);margin:4px 0 10px">Contas marcadas com “· demo” são fictícias e não conseguem entrar no app.</p>
+    <form method="post" action="{{ url_for('admin_demo_apagar') }}" data-confirma="Apagar as contas fictícias da plataforma?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn perigo">Apagar contas de demonstração</button></form>
+    {% else %}
+    <b>Mostrar o painel funcionando</b><p style="margin:4px 0 10px">Cria terapeutas e clínicas fictícios com assinaturas, testes, atrasos, cancelamentos e meses de cobranças, para apresentar o modelo de revenda.</p>
+    <form method="post" action="{{ url_for('admin_demo_carregar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn bloco">Carregar contas de demonstração</button></form>
+    {% endif %}
+  </div>
+</main>
+{% endblock %}

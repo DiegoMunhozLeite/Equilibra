@@ -1,0 +1,19 @@
+{% extends "base.html" %}{% block body_class %}sem-barra{% endblock %}
+{% block conteudo %}
+<main class="auth">{% include "_marca.html" %}
+  <h1>Esqueci minha senha</h1>
+  {% if enviado and email_ok %}
+  <p style="margin-top:10px">Se esse e-mail estiver cadastrado, enviamos um link para criar uma nova senha. Ele vale por 1 hora. Confira também a caixa de spam.</p>
+  {% elif enviado %}
+  <p style="margin-top:10px">O envio de e-mail ainda não está ativo neste app.</p>
+  <ul style="padding-left:18px"><li><b>Paciente:</b> peça ao seu terapeuta um link de nova senha. Ele gera pela sua ficha.</li>
+    <li><b>Terapeuta:</b> fale com quem administra o app.</li></ul>
+  {% else %}
+  <p style="color:var(--apagado);margin-top:6px">Digite o e-mail da sua conta.</p>
+  <form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="campo"><label for="email">E-mail</label><input id="email" name="email" type="email" autocapitalize="off" required></div>
+    <button class="btn bloco" style="margin-top:20px">Continuar</button></form>
+  {% endif %}
+  <p style="margin-top:24px"><a href="{{ url_for('entrar') }}">Voltar para entrar</a></p>
+</main>
+{% endblock %}

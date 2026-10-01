@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div><a class="voltar" href="{{ url_for('biblioteca', c=a.categoria) }}">‹ {{ CATEGORIAS[a.categoria] }}</a>
+  <h1>{{ a.titulo }}</h1>{% if a.resumo %}<div class="sub">{{ a.resumo }}</div>{% endif %}</div>
+  {% if current_user.papel == 'terapeuta' and a.autor_id == current_user.id %}<a class="btn sec peq" href="{{ url_for('artigo_form', aid=a.id) }}">Editar</a>{% endif %}</header>
+<main class="pagina"><article class="artigo">{{ a.corpo|texto }}</article>
+  {% if a.categoria == 'pratica' %}<a class="btn bloco" href="{{ url_for('respirar') }}" style="margin-top:24px">Abrir respiração guiada</a>{% endif %}
+</main>
+{% endblock %}

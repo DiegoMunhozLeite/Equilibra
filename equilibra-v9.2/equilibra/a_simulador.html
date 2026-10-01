@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% import "_icones.html" as ic %}
+{% block conteudo %}
+<header class="topo"><div><a class="voltar" href="{{ url_for('admin_painel') }}">‹ Painel da plataforma</a><h1>Simulador de receita</h1><div class="sub">Projeção da revenda de licenças. Mude os números e veja o resultado.</div></div></header>
+<main class="pagina">
+<form method="get" class="cartao">
+  <div class="duas">
+    <div class="campo" style="margin-top:0"><label for="preco_autonomo">Preço autônomo (R$/mês)</label><input id="preco_autonomo" name="preco_autonomo" type="text" inputmode="decimal" value="{{ e.preco_autonomo }}"></div>
+    <div class="campo" style="margin-top:0"><label for="preco_terapeuta">Clínica (R$/terapeuta/mês)</label><input id="preco_terapeuta" name="preco_terapeuta" type="text" inputmode="decimal" value="{{ e.preco_terapeuta }}"></div>
+  </div>
+  <div class="duas">
+    <div class="campo"><label for="testes_autonomos">Autônomos em teste por mês</label><input id="testes_autonomos" name="testes_autonomos" type="number" min="0" value="{{ e.testes_autonomos }}"></div>
+    <div class="campo"><label for="testes_clinicas">Clínicas em teste por mês</label><input id="testes_clinicas" name="testes_clinicas" type="number" min="0" value="{{ e.testes_clinicas }}"></div>
+  </div>
+  <div class="duas">
+    <div class="campo"><label for="conversao">Conversão do teste (%)</label><input id="conversao" name="conversao" type="text" inputmode="decimal" value="{{ e.conversao }}"></div>
+    <div class="campo"><label for="terapeutas_clinica">Terapeutas por clínica</label><input id="terapeutas_clinica" name="terapeutas_clinica" type="number" min="1" value="{{ e.terapeutas_clinica }}"></div>
+  </div>
+  <div class="duas">
+    <div class="campo"><label for="churn">Cancelamentos por mês (%)</label><input id="churn" name="churn" type="text" inputmode="decimal" value="{{ e.churn }}"></div>
+    <div class="campo"><label for="meses">Meses projetados</label><input id="meses" name="meses" type="number" min="6" max="60" value="{{ e.meses }}"></div>
+  </div>
+  <details style="margin-top:8px"><summary>Custos e impostos</summary>
+    <div class="duas">
+      <div class="campo"><label for="taxa_pagamento">Taxa do meio de pagamento (%)</label><input id="taxa_pagamento" name="taxa_pagamento" type="text" inputmode="decimal" value="{{ e.taxa_pagamento }}"></div>
+      <div class="campo"><label for="impostos">Impostos sobre a receita (%)</label><input id="impostos" name="impostos" type="text" inputmode="decimal" value="{{ e.impostos }}"></div>
+    </div>
+    <div class="duas">
+      <div class="campo"><label for="custo_terapeuta">Custo por terapeuta (R$/mês)</label><input id="custo_terapeuta" name="custo_terapeuta" type="text" inputmode="decimal" value="{{ e.custo_terapeuta }}"></div>
+      <div class="campo"><label for="custo_fixo">Custo fixo (R$/mês)</label><input id="custo_fixo" name="custo_fixo" type="text" inputmode="decimal" value="{{ e.custo_fixo }}"></div>
+    </div>
+    <p class="meta" style="color:var(--apagado);font-size:.82rem;margin-top:6px">Custo por terapeuta: parte da hospedagem e da IA (transcrição e resumos). Custo fixo: servidor, banco, domínio, e-mail.</p>
+  </details>
+  <button class="btn bloco" style="margin-top:14px">Calcular</button>
+</form>
+
+{% set fim = linhas[-1] %}
+<div class="numeros" style="margin-top:16px">
+  <div class="numero largo fin-numero"><div class="ic" aria-hidden="true">{{ ic.tendencia() }}</div><div><b>{{ fim.mrr|moeda }}</b><span>Receita mensal no mês {{ fim.mes }} · {{ (fim.mrr * 12)|moeda }} por ano</span></div></div>
+  <div class="numero fin-numero"><div class="ic" aria-hidden="true">{{ ic.pessoas() }}</div><div><b>{{ fim.terapeutas }}</b><span>Terapeutas pagantes</span></div></div>
+  <div class="numero fin-numero"><div class="ic" aria-hidden="true">{{ ic.clinica() }}</div><div><b>{{ fim.clinicas }}</b><span>Clínicas</span></div></div>
+  <div class="numero fin-numero"><div class="ic" aria-hidden="true">{{ ic.balanca() }}</div><div><b class="{{ 'positivo' if fim.liquido >= 0 else 'negativo' }}">{{ fim.liquido|moeda }}</b><span>Lucro no mês {{ fim.mes }}</span></div></div>
+  <div class="numero fin-numero"><div class="ic" aria-hidden="true">{{ ic.soma() }}</div><div><b class="{{ 'positivo' if fim.acumulado >= 0 else 'negativo' }}">{{ fim.acumulado|moeda }}</b><span>Lucro acumulado</span></div></div>
+</div>
+<p class="comparativo" style="margin-top:10px">{% if equilibrio %}O resultado acumulado fica positivo no <b>mês {{ equilibrio }}</b>.{% else %}Com esses números, o resultado acumulado não fica positivo no período.{% endif %}</p>
+
+<div class="secao"><h2>Receita mensal projetada</h2></div>
+<div class="cartao">
+  <div class="grafico-barras" role="img" aria-label="Receita mensal projetada">{% for x in linhas %}<div style="height:{{ (x.mrr * 100 / maior)|round(1) }}%" title="Mês {{ x.mes }}: {{ x.mrr|moeda }}"></div>{% endfor %}</div>
+  <div class="eixo-dias"><span>mês 1</span><span>mês {{ linhas|length }}</span></div>
+</div>
+
+<div class="secao"><h2>Mês a mês</h2></div>
+<div class="cartao" style="overflow-x:auto;padding:8px">
+  <table style="width:100%;border-collapse:collapse;font-size:.85rem;white-space:nowrap">
+    <tr style="color:var(--apagado);text-align:left"><th style="padding:6px">Mês</th><th>Autôn.</th><th>Clín.</th><th>Terap.</th><th>Receita</th><th>Lucro</th><th>Acumulado</th></tr>
+    {% for x in linhas %}<tr style="border-top:1px solid var(--linha)"><td style="padding:6px">{{ x.mes }}</td><td>{{ x.autonomos }}</td><td>{{ x.clinicas }}</td><td>{{ x.terapeutas }}</td><td>{{ x.mrr|moeda }}</td><td class="{{ 'positivo' if x.liquido >= 0 else 'negativo' }}">{{ x.liquido|moeda }}</td><td>{{ x.acumulado|moeda }}</td></tr>{% endfor %}
+  </table>
+</div>
+<p class="meta" style="color:var(--apagado);font-size:.82rem;margin-top:10px">Projeção simplificada, para conversa e planejamento. Não considera custos de aquisição de clientes, salários ou suporte. Os percentuais de imposto dependem do regime tributário: confirme com um contador.</p>
+</main>
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<header class="topo"><div><h1>Ajuda agora</h1><div class="sub">Você não precisa passar por isso sozinho.</div></div></header>
+<main class="pagina">
+  <div class="sos">
+    <a class="urgente" href="tel:192"><b>192</b><span><strong>SAMU</strong><br>Emergência médica, intoxicação ou overdose</span></a>
+    <a href="tel:188"><b>188</b><span><strong>CVV</strong><br>Apoio emocional, 24 horas, gratuito</span></a>
+    {% if current_user.papel == 'paciente' and current_user.terapeuta %}
+    <a href="{{ url_for('respirar') }}"><b>🫁</b><span><strong>Respirar agora</strong><br>Três minutos para a fissura baixar</span></a>
+    {% endif %}
+    {% if current_user.papel == 'paciente' and current_user.emergencia_tel %}
+    <a href="tel:{{ current_user.emergencia_tel }}"><b>☎️</b><span><strong>{{ current_user.emergencia_nome or 'Meu contato de apoio' }}</strong><br>{{ current_user.emergencia_tel }}</span></a>
+    {% endif %}
+  </div>
+  <div class="secao"><h2>Quando a fissura aperta</h2></div>
+  <div class="cartao">
+    <p>A vontade vem em ondas e costuma baixar em 20 a 30 minutos.</p>
+    <p style="margin:0">Saia do lugar, beba água, coma algo, ligue para alguém e respire devagar. Se já usou, não use sozinho e não misture substâncias.</p>
+  </div>
+  <div class="secao"><h2>Apoio gratuito</h2></div>
+  <div class="cartao"><p>O <b>CAPS AD</b> atende pelo SUS sem encaminhamento. Grupos como <b>NA</b> e <b>AA</b> têm reuniões todos os dias, inclusive online.</p>
+    <a href="{{ url_for('biblioteca', c='recuperacao') }}">Ver mais sobre recuperação</a></div>
+</main>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "base.html" %}{% block body_class %}{{ '' if current_user.is_authenticated else 'sem-barra' }}{% endblock %}
+{% block titulo %}Planos · Equilibra{% endblock %}
+{% block conteudo %}
+<header class="topo"><div>{% if current_user.is_authenticated %}<a class="voltar" href="{{ url_for('inicio') }}">‹ Voltar</a>{% else %}{% include "_marca.html" %}{% endif %}
+  <h1>Planos do Equilibra</h1><div class="sub">Acompanhamento holístico em dependência química, para terapeutas e clínicas. {{ dias_teste }} dias grátis, sem cartão.</div></div></header>
+<main class="pagina">
+  <nav class="filtros" aria-label="Ciclo"><a href="#" class="ativo" data-ciclo="mensal">Mensal</a><a href="#" data-ciclo="anual">Anual</a></nav>
+  {% for grupo, titulo in [(autonomos, 'Para terapeutas autônomos'), (clinicas, 'Para clínicas e equipes')] %}{% if grupo %}
+  <div class="secao"><h2>{{ titulo }}</h2></div>
+  {% for p in grupo %}
+  <div class="cartao plano {{ 'destaque' if p.destaque }}">
+    <div class="linha-item" style="align-items:flex-start"><div class="meio"><h3>{{ p.nome }}</h3>{% if p.destaque %}<span class="tag azul">Mais escolhido</span>{% endif %}</div>
+      <div style="text-align:right">
+        <div class="preco" data-mensal><b>{{ p.preco_mensal|moeda }}</b><span>/mês{{ ' por terapeuta' if p.publico == 'clinica' }}</span></div>
+        <div class="preco" data-anual hidden><b>{{ (p.preco_anual(1) / 12)|moeda }}</b><span>/mês{{ ' por terapeuta' if p.publico == 'clinica' }}</span><small>{{ p.preco_anual(1)|moeda }} por ano{% if p.meses_gratis_anual %} · {{ p.meses_gratis_anual }} meses grátis{% endif %}</small></div>
+      </div></div>
+    <ul class="recursos">{% for r in p.lista_recursos %}<li>{{ r }}</li>{% endfor %}</ul>
+    {% if current_user.is_authenticated and current_user.papel == 'terapeuta' %}
+    <a class="btn bloco" href="{{ url_for('contratar_plano', plano=p.codigo) }}">Escolher {{ p.nome }}</a>
+    {% else %}
+    <a class="btn bloco" href="{{ url_for('cadastro', plano=p.codigo, tipo='clinica' if p.publico == 'clinica' else 'autonomo') }}">Começar teste grátis</a>
+    {% endif %}
+  </div>
+  {% endfor %}{% endif %}{% endfor %}
+  <p class="meta" style="color:var(--apagado);font-size:.85rem;margin-top:14px">Valores de exemplo. Cancele quando quiser: seus dados continuam disponíveis para exportação.</p>
+</main>
+{% endblock %}
+{% block scripts %}
+<script nonce="{{ csp_nonce() }}">
+document.querySelectorAll('[data-ciclo]').forEach(function (a) {
+  a.addEventListener('click', function (e) { e.preventDefault();
+    document.querySelectorAll('[data-ciclo]').forEach(function (b) { b.classList.toggle('ativo', b === a); });
+    var anual = a.dataset.ciclo === 'anual';
+    document.querySelectorAll('[data-mensal]').forEach(function (x) { x.hidden = anual; });
+    document.querySelectorAll('[data-anual]').forEach(function (x) { x.hidden = !anual; });
+  });
+});
+</script>
+{% endblock %}
