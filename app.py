@@ -97,7 +97,7 @@ def para_float(txt, padrao=None):
 
 
 # ============================================================ constantes
-VERSAO = "v9.4"
+VERSAO = "v9.5"
 # Arquivos que precisam estar na mesma pasta do app.py. Se faltar algum, o painel avisa.
 ARQUIVOS_ESSENCIAIS = ['_icones.html', '_itens.html', '_marca.html', 'a_admin.html', 'a_conta.html', 'a_planos.html', 'a_simulador.html', 'ajuda.html', 'app.js', 'app.py', 'apple-touch-icon.png', 'artigo.html', 'base.html', 'biblioteca.html', 'boas_vindas.html', 'c_codigo.html', 'c_codigos.html', 'c_esqueci.html', 'c_paciente.html', 'c_privacidade.html', 'c_redefinir.html', 'c_terapeuta.html', 'c_termos.html', 'cadastro.html', 'conta.py', 'conteudo_base.py', 'convite.html', 'cripto.py', 'demo.py', 'entrar.html', 'erro.html', 'financeiro.py', 'icon-192.png', 'icon-512.png', 'licenca.py', 'manifest.webmanifest', 'offline.html', 'p_casa.html', 'p_checkin.html', 'p_diario.html', 'planos.html', 'plataforma.py', 'relatorios.py', 'respirar.html', 'style.css', 'sw.js', 't__indicadores.html', 't_agenda.html', 't_artigo_form.html', 't_assinatura.html', 't_clinica.html', 't_consulta_form.html', 't_contratar.html', 't_fim.html', 't_financeiro.html', 't_gravacao.html', 't_mood.html', 't_paciente.html', 't_paciente_form.html', 't_pacientes.html', 't_painel.html', 't_recibo.html', 't_registro.html', 't_registro_form.html', 't_registros.html', 't_relatorio.html', 't_relatorio_opcoes.html', 't_relatorio_paciente.html', 'voz.py']
 

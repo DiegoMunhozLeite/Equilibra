@@ -14,7 +14,7 @@
 <link rel="manifest" href="{{ url_for('manifest') }}">
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
 <link rel="icon" href="{{ url_for('static', filename='icon-192.png') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=7">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=9">
 <script src="{{ url_for('static', filename='app.js') }}?v=1" defer></script>
 </head>
 {% import "_icones.html" as ic %}
@@ -26,6 +26,9 @@
 {% if licenca and licenca.aviso and request.endpoint not in ['minha_assinatura','contratar_plano'] %}<a class="faixa-avaliacao" href="{{ url_for('minha_assinatura') }}" style="display:block;background:{{ 'var(--ambar-claro)' if licenca.pode else 'var(--vermelho-claro)' }};color:{{ 'var(--ambar)' if licenca.pode else 'var(--vermelho)' }}">{{ licenca.aviso }} Ver assinatura ›</a>{% endif %}
 {% if modo_avaliacao %}<div class="faixa-avaliacao" role="note">Versão de avaliação · IA simulada, sem custo · não cadastre pacientes reais</div>{% endif %}
 <div class="ptr" aria-hidden="true"><span></span></div>
+{% if current_user.is_authenticated and not sem_barra %}
+<header class="app-topo"><a href="{{ url_for('inicio') }}" class="logo-home" aria-label="Equilibra, ir para o início"><img src="{{ url_for('static', filename='icon-192.png') }}" alt="" width="34" height="34"><span>Equilibra</span></a></header>
+{% endif %}
 {% with msgs = get_flashed_messages(with_categories=true) %}
 {% if msgs %}<div class="toasts" role="status" aria-live="polite">{% for cat, m in msgs %}<div class="toast {{ cat }}"><span>{{ m }}</span><button type="button" class="toast-x" aria-label="Fechar aviso">×</button></div>{% endfor %}</div>{% endif %}
 {% endwith %}

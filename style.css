@@ -501,3 +501,20 @@ dialog::backdrop { background: rgba(30, 45, 59, .28); -webkit-backdrop-filter: b
   @view-transition { navigation: none; }
 }
 @media print { .toasts, .ptr, dialog, .barra { display: none !important; } }
+
+/* barra do topo com o logo (volta para o início) */
+.app-topo { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 20px; background: var(--vidro); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid #E3EEF8; view-transition-name: topo; }
+.logo-home { display: inline-flex; align-items: center; gap: 10px; color: var(--tinta); font: 800 1.15rem var(--serifa); letter-spacing: -.02em;
+  padding: 4px 10px 4px 4px; margin-left: -4px; border-radius: 999px; transition: background .15s; }
+.logo-home img { width: 34px; height: 34px; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--linha); }
+.logo-home:active { background: var(--primaria-clara); }
+@media (min-width: 700px) { .app-topo { padding-left: max(20px, calc((100% - 640px) / 2 + 20px)); } }
+@media print { .app-topo { display: none !important; } }
+.btn svg { width: 20px; height: 20px; flex: none; }
+
+.destaque-demo { margin: 4px 0 16px; padding: 22px; border-radius: 24px; background: linear-gradient(160deg, #EAF4FD, #FFFFFF 70%);
+  border: 1.5px solid var(--primaria-media); box-shadow: var(--sombra); display: grid; gap: 10px; }
+.destaque-demo h2 { font-size: 1.35rem; margin: 2px 0 0; }
+.destaque-demo p { margin: 0 0 4px; color: var(--apagado); }

@@ -125,6 +125,7 @@ A versão em uso aparece no rodapé de todas as telas. Ela é definida em `VERSA
 | v5 | Visual branco, testes Multi 1 a 12 com estoque por tipo, 10 indicadores, revisão da transcrição com prova da IA, check-in e check-out, relatório mensal, ver como paciente |
 | v6 | Número da versão no rodapé do app |
 | v7 | Versões de bibliotecas travadas e inicialização segura do servidor (corrige falha de build) |
+| v9.5 | Barra no topo com o logo do Equilibra, que leva ao Início em qualquer tela; botão de carregar dados de demonstração em destaque no topo do Início; o cartão Sessões hoje abre a agenda do dia |
 | v9.4 | Versão de teste online sem senha: com MODO_TESTE_ABERTO=1 (já ligado no render.yaml), cada pessoa entra só com o nome e ganha a própria conta, com o Painel da plataforma liberado. Para uso real, mude para 0 |
 | v9.3 | Modo sem senha para uso local: o app pergunta só o nome do terapeuta e abre direto, apenas no próprio computador (iniciar.bat) |
 | v9.2 | Revisão de engenharia: CSP com nonce, HSTS, limite de tentativas, log estruturado, erro 500 amigável, verificação de saúde, índices no banco; visual com fonte do sistema, navegação flutuante de 5 abas com painel Mais, avisos flutuantes, confirmação no estilo do app, trava contra envio duplo, puxar para atualizar e transições entre telas |
