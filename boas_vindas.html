@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% block body_class %}sem-barra{% endblock %}
+{% block titulo %}Bem-vindo · Equilibra{% endblock %}
+{% block conteudo %}
+<main class="auth">
+  {% include "_marca.html" %}
+  <h1>Bem-vindo</h1>
+  <p style="color:var(--apagado);margin-top:6px">Como você quer ser chamado no Equilibra?</p>
+  <form method="post">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="campo"><label for="nome">Seu nome</label>
+      <input id="nome" name="nome" type="text" autocomplete="name" required autofocus></div>
+    <button class="btn bloco" style="margin-top:24px">Começar</button>
+  </form>
+  {% if teste %}<p class="meta" style="color:var(--apagado);font-size:.85rem;margin-top:20px">Versão de teste: entre só com o nome. Neste aparelho, o app volta direto para a sua conta.</p>{% else %}<p class="meta" style="color:var(--apagado);font-size:.85rem;margin-top:20px">Modo sem senha: o app abre direto neste computador, e os dados ficam guardados só nele. Para mudar o nome depois, use Minha conta.</p>{% endif %}
+</main>
+{% endblock %}

@@ -163,6 +163,8 @@ def plano(codigo):
 
 
 def e_admin(u):
+    if os.environ.get("MODO_TESTE_ABERTO") == "1" and u and getattr(u, "papel", "") == "terapeuta":
+        return True  # versão de teste: todos veem o Painel da plataforma
     lista = {e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()}
     return bool(u and getattr(u, "papel", "") == "terapeuta" and u.email.lower() in lista)
 

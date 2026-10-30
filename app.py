@@ -97,9 +97,9 @@ def para_float(txt, padrao=None):
 
 
 # ============================================================ constantes
-VERSAO = "v9.2"
+VERSAO = "v9.4"
 # Arquivos que precisam estar na mesma pasta do app.py. Se faltar algum, o painel avisa.
-ARQUIVOS_ESSENCIAIS = ['_icones.html', '_itens.html', '_marca.html', 'a_admin.html', 'a_conta.html', 'a_planos.html', 'a_simulador.html', 'ajuda.html', 'app.js', 'app.py', 'apple-touch-icon.png', 'artigo.html', 'base.html', 'biblioteca.html', 'c_codigo.html', 'c_codigos.html', 'c_esqueci.html', 'c_paciente.html', 'c_privacidade.html', 'c_redefinir.html', 'c_terapeuta.html', 'c_termos.html', 'cadastro.html', 'conta.py', 'conteudo_base.py', 'convite.html', 'cripto.py', 'demo.py', 'entrar.html', 'erro.html', 'financeiro.py', 'icon-192.png', 'icon-512.png', 'licenca.py', 'manifest.webmanifest', 'offline.html', 'p_casa.html', 'p_checkin.html', 'p_diario.html', 'planos.html', 'plataforma.py', 'relatorios.py', 'respirar.html', 'style.css', 'sw.js', 't__indicadores.html', 't_agenda.html', 't_artigo_form.html', 't_assinatura.html', 't_clinica.html', 't_consulta_form.html', 't_contratar.html', 't_fim.html', 't_financeiro.html', 't_gravacao.html', 't_mood.html', 't_paciente.html', 't_paciente_form.html', 't_pacientes.html', 't_painel.html', 't_recibo.html', 't_registro.html', 't_registro_form.html', 't_registros.html', 't_relatorio.html', 't_relatorio_opcoes.html', 't_relatorio_paciente.html', 'voz.py']
+ARQUIVOS_ESSENCIAIS = ['_icones.html', '_itens.html', '_marca.html', 'a_admin.html', 'a_conta.html', 'a_planos.html', 'a_simulador.html', 'ajuda.html', 'app.js', 'app.py', 'apple-touch-icon.png', 'artigo.html', 'base.html', 'biblioteca.html', 'boas_vindas.html', 'c_codigo.html', 'c_codigos.html', 'c_esqueci.html', 'c_paciente.html', 'c_privacidade.html', 'c_redefinir.html', 'c_terapeuta.html', 'c_termos.html', 'cadastro.html', 'conta.py', 'conteudo_base.py', 'convite.html', 'cripto.py', 'demo.py', 'entrar.html', 'erro.html', 'financeiro.py', 'icon-192.png', 'icon-512.png', 'licenca.py', 'manifest.webmanifest', 'offline.html', 'p_casa.html', 'p_checkin.html', 'p_diario.html', 'planos.html', 'plataforma.py', 'relatorios.py', 'respirar.html', 'style.css', 'sw.js', 't__indicadores.html', 't_agenda.html', 't_artigo_form.html', 't_assinatura.html', 't_clinica.html', 't_consulta_form.html', 't_contratar.html', 't_fim.html', 't_financeiro.html', 't_gravacao.html', 't_mood.html', 't_paciente.html', 't_paciente_form.html', 't_pacientes.html', 't_painel.html', 't_recibo.html', 't_registro.html', 't_registro_form.html', 't_registros.html', 't_relatorio.html', 't_relatorio_opcoes.html', 't_relatorio_paciente.html', 'voz.py']
 
 
 def arquivos_faltando():
@@ -457,7 +457,7 @@ def registrar_acesso(paciente_id, acao):
 def controlar_inatividade():
     if request.endpoint in ("static", "service_worker", "manifest") or not current_user.is_authenticated:
         return
-    if current_user.papel == "terapeuta" and not session.get("demo_como"):
+    if current_user.papel == "terapeuta" and not session.get("demo_como") and not teste_aberto():
         ultimo = session.get("ultimo_uso")
         if ultimo and datetime.now().timestamp() - ultimo > INATIVIDADE_MIN * 60:
             logout_user()
@@ -691,10 +691,60 @@ def inicio():
     return redirect(url_for("painel" if current_user.papel == "terapeuta" else "casa"))
 
 
+EMAIL_LOCAL = "local@equilibra.local"
+
+
+def acesso_sem_senha():
+    """Modo sem senha: só com ACESSO_SEM_SENHA=1 e só para quem acessa do próprio computador."""
+    if os.environ.get("ACESSO_SEM_SENHA") != "1":
+        return False
+    orig = request.environ.get("werkzeug.proxy_fix.orig", {}).get("REMOTE_ADDR")  # ignora cabeçalhos de proxy
+    ip = orig or request.environ.get("REMOTE_ADDR", "")
+    return ip in ("127.0.0.1", "::1")
+
+
+def teste_aberto():
+    """Versão de teste online: entra só com o nome, uma conta por pessoa (MODO_TESTE_ABERTO=1)."""
+    return os.environ.get("MODO_TESTE_ABERTO") == "1"
+
+
 @app.route("/entrar", methods=["GET", "POST"])
 def entrar():
     if current_user.is_authenticated:
         return redirect(url_for("inicio"))
+    if teste_aberto() and not acesso_sem_senha():
+        if request.method == "POST":
+            nome = request.form.get("nome", "").strip()[:80]
+            if not nome:
+                flash("Digite seu nome para começar.", "erro")
+            else:
+                import licenca
+                t = Terapeuta(nome=nome, email=f"teste-{secrets.token_hex(6)}@equilibra.local")
+                definir_senha(t, secrets.token_urlsafe(32))
+                db.session.add(t)
+                db.session.commit()
+                licenca.apos_cadastro(t, {}, None)
+                login_user(t, remember=True)  # volta direto nas próximas vezes, neste aparelho
+                return redirect(url_for("painel"))
+        return render_template("boas_vindas.html", teste=True)
+    if acesso_sem_senha():
+        t = Terapeuta.query.filter_by(email=EMAIL_LOCAL).first()
+        if not t and request.method == "POST":
+            nome = request.form.get("nome", "").strip()[:80]
+            if not nome:
+                flash("Digite seu nome para começar.", "erro")
+            else:
+                import licenca
+                t = Terapeuta(nome=nome, email=EMAIL_LOCAL)
+                definir_senha(t, secrets.token_urlsafe(32))  # senha aleatória: o acesso é só por este computador
+                db.session.add(t)
+                db.session.commit()
+                licenca.apos_cadastro(t, {}, None)
+        if t:
+            login_user(t, remember=False)
+            session["ultimo_uso"] = datetime.now().timestamp()
+            return redirect(request.args.get("next") if (request.args.get("next") or "").startswith("/t") else url_for("painel"))
+        return render_template("boas_vindas.html")
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
         senha = request.form.get("senha", "")
@@ -1768,4 +1818,5 @@ import plataforma  # noqa: E402,F401
 iniciar_banco()
 
 if __name__ == "__main__":
-    app.run(debug=DEV, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    local = os.environ.get("ACESSO_SEM_SENHA") == "1"  # sem senha: só aceita conexões deste computador
+    app.run(debug=DEV, host="127.0.0.1" if local else "0.0.0.0", port=int(os.environ.get("PORT", 5000)))

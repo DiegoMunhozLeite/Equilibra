@@ -31,6 +31,8 @@ services:
         fromDatabase:
           name: equilibra-db
           property: connectionString
+      - key: MODO_TESTE_ABERTO
+        value: "1"
       - key: MODO_AVALIACAO
         value: "1"
       - key: ADMIN_EMAILS
